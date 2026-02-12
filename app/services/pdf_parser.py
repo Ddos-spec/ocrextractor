@@ -25,6 +25,7 @@ class ParsedBillingFields:
     total_tagihan_int: Optional[int]
     komponen_billing: dict[str, dict[str, object]]
     ocr_payload: dict[str, str]
+    ai_bundle: dict[str, object]
 
 
 _NAME_STOP_KEYWORDS = (
@@ -178,11 +179,20 @@ OCR_MAX_PAGES = _env_int("OCR_MAX_PAGES", 0, minimum=0)
 OCR_PSM = _env_int("OCR_PSM", 6, minimum=3)
 OCR_LANG_PRIMARY = os.getenv("OCR_LANG_PRIMARY", "ind+eng")
 OCR_LANG_FALLBACK = os.getenv("OCR_LANG_FALLBACK", "eng")
+AI_BUNDLE_TEXT_MAX_CHARS = _env_int("AI_BUNDLE_TEXT_MAX_CHARS", 80000, minimum=2000)
 
 
 def create_empty_ocr_payload() -> dict[str, str]:
     """Create normalized empty payload expected by downstream AI parser."""
     return {key: "" for key in OCR_PAYLOAD_KEYS}
+
+
+def _truncate_for_bundle(text: str) -> tuple[str, bool]:
+    """Truncate large OCR text for response payload safety."""
+    if len(text) <= AI_BUNDLE_TEXT_MAX_CHARS:
+        return text, False
+    trimmed = text[:AI_BUNDLE_TEXT_MAX_CHARS].rstrip()
+    return f"{trimmed}\n...[TRUNCATED]...", True
 
 
 def _squash_whitespace(text: str) -> str:
@@ -534,6 +544,33 @@ def extract_ocr_payload(
     return payload
 
 
+def build_ai_bundle(
+    text: str,
+    *,
+    nama: Optional[str],
+    total_tagihan_raw: Optional[str],
+    total_tagihan_int: Optional[int],
+    komponen_billing: dict[str, dict[str, object]],
+    ocr_payload: dict[str, str],
+) -> dict[str, object]:
+    """Build a single AI-ready package containing all extracted context."""
+    raw_text, truncated = _truncate_for_bundle(text)
+    return {
+        "schema_version": "v1",
+        "source": "hospital_billing_ocr",
+        "raw_text": raw_text,
+        "raw_text_truncated": truncated,
+        "raw_text_chars": len(text),
+        "normalized": {
+            "nama": nama,
+            "total_tagihan_raw": total_tagihan_raw,
+            "total_tagihan_int": total_tagihan_int,
+        },
+        "komponen_billing": komponen_billing,
+        "ocr_payload": ocr_payload,
+    }
+
+
 def is_text_too_short(text: str, min_non_space_chars: int = 40) -> bool:
     """Return True when extracted text is likely empty/truncated."""
     cleaned = re.sub(r"\s+", "", text)
@@ -674,6 +711,14 @@ def parse_billing_text(text: str) -> ParsedBillingFields:
         total_tagihan_raw=total_tagihan_raw,
         komponen_billing=komponen_billing,
     )
+    ai_bundle = build_ai_bundle(
+        text,
+        nama=nama,
+        total_tagihan_raw=total_tagihan_raw,
+        total_tagihan_int=total_tagihan_int,
+        komponen_billing=komponen_billing,
+        ocr_payload=ocr_payload,
+    )
 
     return ParsedBillingFields(
         nama=nama,
@@ -681,4 +726,5 @@ def parse_billing_text(text: str) -> ParsedBillingFields:
         total_tagihan_int=total_tagihan_int,
         komponen_billing=komponen_billing,
         ocr_payload=ocr_payload,
+        ai_bundle=ai_bundle,
     )
