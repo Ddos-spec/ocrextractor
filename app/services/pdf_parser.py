@@ -94,20 +94,22 @@ _NAME_TAIL_FUZZY_TARGETS = (
 )
 
 _COMPONENT_ALIASES: dict[str, tuple[str, ...]] = {
-    "ruangan": ("RUANGAN", "KAMAR", "BED"),
+    "ruangan": ("RUANGAN", "KAMAR", "BED", "RAWAT INAP", "RAWAT JALAN", "IGD"),
     "pemeriksaan_dokter": (
         "PEMERIKSAAN DOKTER",
         "KONSULTASI DOKTER",
         "VISITE DOKTER",
         "TINDAKAN DOKTER",
+        "DOKTER SPESIALIS",
+        "KONSUL DOKTER",
     ),
-    "asuhan_keperawatan": ("ASUHAN KEPERAWATAN", "TINDAKAN KEPERAWATAN", "JASA PERAWAT"),
-    "laboratorium": ("LABORATORIUM", "LAB "),
-    "penunjang": ("PENUNJANG", "PENUNJANG MEDIK"),
+    "asuhan_keperawatan": ("ASUHAN KEPERAWATAN", "TINDAKAN KEPERAWATAN", "JASA PERAWAT", "KEPERAWATAN"),
+    "laboratorium": ("LABORATORIUM", "LAB ", "LABORAT"),
+    "penunjang": ("PENUNJANG", "PENUNJANG MEDIK", "USG", "ECG", "EKG", "ECHO"),
     "sewa_alat": ("SEWA ALAT", "SEWAALAT", "SEWA ALKES"),
-    "radiologi": ("RADIOLOGI",),
-    "obat": ("OBAT", "FARMASI", "MEDIKASI"),
-    "bmhp": ("BMHP", "BHP", "BAHAN MEDIS HABIS PAKAI", "ALKES"),
+    "radiologi": ("RADIOLOGI", "RONTGEN", "X-RAY", "CT SCAN", "MRI"),
+    "obat": ("OBAT", "FARMASI", "MEDIKASI", "APOTIK"),
+    "bmhp": ("BMHP", "BHP", "BAHAN MEDIS HABIS PAKAI", "ALKES", "BAHAN HABIS PAKAI"),
 }
 
 _COMPONENT_LABELS: dict[str, str] = {
@@ -150,6 +152,7 @@ OCR_MAX_PAGES = _env_int("OCR_MAX_PAGES", 4, minimum=1)
 OCR_PSM = _env_int("OCR_PSM", 6, minimum=3)
 OCR_LANG_PRIMARY = os.getenv("OCR_LANG_PRIMARY", "ind+eng")
 OCR_LANG_FALLBACK = os.getenv("OCR_LANG_FALLBACK", "eng")
+OCR_EARLY_STOP_COMPONENT_HITS = _env_int("OCR_EARLY_STOP_COMPONENT_HITS", 3, minimum=1)
 
 
 def _squash_whitespace(text: str) -> str:
@@ -367,8 +370,27 @@ def extract_billing_components(text: str) -> dict[str, dict[str, object]]:
     lines = [_squash_whitespace(line) for line in text.splitlines() if line.strip()]
     upper_lines = [line.upper() for line in lines]
 
+    current_section_key: Optional[str] = None
+
     for index, upper_line in enumerate(upper_lines):
         line = lines[index]
+
+        matched_header_key: Optional[str] = None
+        for key, aliases in _COMPONENT_ALIASES.items():
+            if any(alias in upper_line for alias in aliases):
+                matched_header_key = key
+                break
+        if matched_header_key is not None:
+            current_section_key = matched_header_key
+
+        if "JUMLAH" in upper_line and current_section_key is not None:
+            amount_on_summary = _extract_amount_from_line(line)
+            if amount_on_summary is not None:
+                section_result = results[current_section_key]
+                section_result["ditemukan"] = True
+                section_result["nilai_raw"] = line
+                section_result["nilai_int"] = amount_on_summary
+
         for key, aliases in _COMPONENT_ALIASES.items():
             if not any(alias in upper_line for alias in aliases):
                 continue
@@ -431,12 +453,16 @@ def _extract_text_via_ocr(pdf_bytes: bytes) -> str:
         return ""
 
     def target_page_indices(page_count: int) -> list[int]:
-        """Prioritize likely pages containing identity and final total."""
+        """Prioritize likely pages containing identity, totals, and components."""
+        middle = page_count // 2
         candidates = [
             0,
             page_count - 1,
+            middle,
             page_count - 2,
             1,
+            middle - 1,
+            middle + 1,
             page_count - 3,
             2,
         ]
@@ -488,9 +514,18 @@ def _extract_text_via_ocr(pdf_bytes: bytes) -> str:
                 if ocr_text:
                     page_texts.append(ocr_text)
 
-                    # Stop early when both target fields are already found.
+                    # Stop early only when core fields and enough components are found.
                     parsed = parse_billing_text("\n".join(page_texts))
-                    if parsed.nama is not None and parsed.total_tagihan_int is not None:
+                    found_components = sum(
+                        1
+                        for component in parsed.komponen_billing.values()
+                        if bool(component.get("ditemukan"))
+                    )
+                    if (
+                        parsed.nama is not None
+                        and parsed.total_tagihan_int is not None
+                        and found_components >= OCR_EARLY_STOP_COMPONENT_HITS
+                    ):
                         break
     except Exception:
         return ""
