@@ -1,0 +1,6 @@
+fastapi==0.115.8
+uvicorn[standard]==0.34.0
+httpx==0.28.1
+pdfplumber==0.11.5
+pytesseract==0.3.13
+PyMuPDF==1.25.3
