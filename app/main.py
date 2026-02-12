@@ -62,6 +62,7 @@ def _build_response(
     nama: Optional[str] = None,
     total_tagihan_raw: Optional[str] = None,
     total_tagihan_int: Optional[int] = None,
+    komponen_billing: Optional[dict[str, dict[str, object]]] = None,
 ) -> ParseBillingResponse:
     """Build a normalized response object."""
     return ParseBillingResponse(
@@ -70,6 +71,7 @@ def _build_response(
         nama=nama,
         total_tagihan_raw=total_tagihan_raw,
         total_tagihan_int=total_tagihan_int,
+        komponen_billing=komponen_billing or {},
         chat_id=chat_id,
         file_name=file_name,
     )
@@ -239,7 +241,12 @@ async def parse_billing(
 
         await _cache_set(cache_key, parsed)
 
-    if parsed.nama is None and parsed.total_tagihan_int is None:
+    has_component_data = any(
+        bool(component.get("ditemukan"))
+        for component in parsed.komponen_billing.values()
+    )
+
+    if parsed.nama is None and parsed.total_tagihan_int is None and not has_component_data:
         return _build_response(
             success=False,
             message="Gagal menemukan nama dan total tagihan di dokumen.",
@@ -252,6 +259,8 @@ async def parse_billing(
 
     if parsed.nama is not None and parsed.total_tagihan_int is not None:
         message = "Berhasil ekstrak billing."
+    elif has_component_data:
+        message = "Berhasil ekstrak sebagian data billing dan komponen."
     else:
         message = "Berhasil ekstrak sebagian data billing."
 
@@ -261,6 +270,7 @@ async def parse_billing(
         nama=parsed.nama,
         total_tagihan_raw=parsed.total_tagihan_raw,
         total_tagihan_int=parsed.total_tagihan_int,
+        komponen_billing=parsed.komponen_billing,
         chat_id=chat_id,
         file_name=file_name,
     )

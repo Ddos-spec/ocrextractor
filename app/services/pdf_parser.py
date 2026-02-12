@@ -23,6 +23,7 @@ class ParsedBillingFields:
     nama: Optional[str]
     total_tagihan_raw: Optional[str]
     total_tagihan_int: Optional[int]
+    komponen_billing: dict[str, dict[str, object]]
 
 
 _NAME_STOP_KEYWORDS = (
@@ -65,6 +66,7 @@ _TOTAL_PATTERN = re.compile(
     r"(?is)\bTOTAL\s*TAGIHAN\b[\s:.\-]*(?:(?:R\s*P)|RUPIAH)?[\s:.\-]*([0-9][0-9.,\s]{0,40})"
 )
 _AMOUNT_TOKEN_PATTERN = re.compile(r"(?<!\d)(\d{1,3}(?:[.,\s]\d{3})+(?:,\d{1,2})?|\d{5,})(?!\d)")
+_RUPIAH_INLINE_PATTERN = re.compile(r"(?i)\bRP\.?\s*([0-9][0-9.,\s]{0,30})")
 
 _NAME_BLOCKLIST_PHRASES = (
     "RUMAH SAKIT",
@@ -90,6 +92,35 @@ _NAME_TAIL_FUZZY_TARGETS = (
     "NOMOR",
     "RM",
 )
+
+_COMPONENT_ALIASES: dict[str, tuple[str, ...]] = {
+    "ruangan": ("RUANGAN", "KAMAR", "BED"),
+    "pemeriksaan_dokter": (
+        "PEMERIKSAAN DOKTER",
+        "KONSULTASI DOKTER",
+        "VISITE DOKTER",
+        "TINDAKAN DOKTER",
+    ),
+    "asuhan_keperawatan": ("ASUHAN KEPERAWATAN", "TINDAKAN KEPERAWATAN", "JASA PERAWAT"),
+    "laboratorium": ("LABORATORIUM", "LAB "),
+    "penunjang": ("PENUNJANG", "PENUNJANG MEDIK"),
+    "sewa_alat": ("SEWA ALAT", "SEWAALAT", "SEWA ALKES"),
+    "radiologi": ("RADIOLOGI",),
+    "obat": ("OBAT", "FARMASI", "MEDIKASI"),
+    "bmhp": ("BMHP", "BHP", "BAHAN MEDIS HABIS PAKAI", "ALKES"),
+}
+
+_COMPONENT_LABELS: dict[str, str] = {
+    "ruangan": "Ruangan",
+    "pemeriksaan_dokter": "Pemeriksaan Dokter",
+    "asuhan_keperawatan": "Asuhan Keperawatan",
+    "laboratorium": "Laboratorium",
+    "penunjang": "Penunjang",
+    "sewa_alat": "Sewa Alat",
+    "radiologi": "Radiologi",
+    "obat": "Obat",
+    "bmhp": "BMHP",
+}
 
 
 def _env_int(name: str, default: int, minimum: int = 1) -> int:
@@ -292,6 +323,83 @@ def extract_total_tagihan(text: str) -> tuple[Optional[str], Optional[int]]:
     return selected_raw, selected_value
 
 
+def _extract_amount_from_line(line: str) -> Optional[int]:
+    """Pick best rupiah amount candidate from a single OCR/text line."""
+    rupiah_tokens = _RUPIAH_INLINE_PATTERN.findall(line)
+    if rupiah_tokens:
+        rupiah_values = []
+        for token in rupiah_tokens:
+            value = _parse_rupiah_amount(token)
+            if value is not None:
+                rupiah_values.append(value)
+        if rupiah_values:
+            return rupiah_values[-1]
+
+    amount_tokens = _AMOUNT_TOKEN_PATTERN.findall(line)
+    if not amount_tokens:
+        return None
+
+    parsed_values = []
+    for token in amount_tokens:
+        value = _parse_rupiah_amount(token)
+        if value is not None:
+            parsed_values.append(value)
+
+    if not parsed_values:
+        return None
+
+    # For billing rows, the right-most amount is usually line total.
+    return parsed_values[-1]
+
+
+def extract_billing_components(text: str) -> dict[str, dict[str, object]]:
+    """Extract requested billing components and optional nominal values."""
+    results: dict[str, dict[str, object]] = {
+        key: {
+            "label": _COMPONENT_LABELS[key],
+            "ditemukan": False,
+            "nilai_raw": None,
+            "nilai_int": None,
+        }
+        for key in _COMPONENT_ALIASES
+    }
+
+    lines = [_squash_whitespace(line) for line in text.splitlines() if line.strip()]
+    upper_lines = [line.upper() for line in lines]
+
+    for index, upper_line in enumerate(upper_lines):
+        line = lines[index]
+        for key, aliases in _COMPONENT_ALIASES.items():
+            if not any(alias in upper_line for alias in aliases):
+                continue
+
+            current = results[key]
+            current["ditemukan"] = True
+
+            raw_line = line
+            amount_value = _extract_amount_from_line(line)
+            if amount_value is None and index + 1 < len(lines):
+                next_line = lines[index + 1]
+                next_upper = upper_lines[index + 1]
+                next_is_component_header = any(
+                    alias in next_upper for aliases in _COMPONENT_ALIASES.values() for alias in aliases
+                )
+                next_amount = _extract_amount_from_line(next_line)
+                if next_amount is not None and not next_is_component_header:
+                    raw_line = f"{line} {next_line}"
+                    amount_value = next_amount
+
+            if amount_value is not None:
+                previous_value = current["nilai_int"]
+                if not isinstance(previous_value, int) or amount_value > previous_value:
+                    current["nilai_int"] = amount_value
+                    current["nilai_raw"] = raw_line
+            elif current["nilai_raw"] is None:
+                current["nilai_raw"] = raw_line
+
+    return results
+
+
 def is_text_too_short(text: str, min_non_space_chars: int = 40) -> bool:
     """Return True when extracted text is likely empty/truncated."""
     cleaned = re.sub(r"\s+", "", text)
@@ -417,9 +525,11 @@ def parse_billing_text(text: str) -> ParsedBillingFields:
     """Parse billing text into normalized name and total fields."""
     nama = extract_nama(text)
     total_tagihan_raw, total_tagihan_int = extract_total_tagihan(text)
+    komponen_billing = extract_billing_components(text)
 
     return ParsedBillingFields(
         nama=nama,
         total_tagihan_raw=total_tagihan_raw,
         total_tagihan_int=total_tagihan_int,
+        komponen_billing=komponen_billing,
     )
