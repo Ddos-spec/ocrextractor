@@ -63,6 +63,7 @@ def _build_response(
     total_tagihan_raw: Optional[str] = None,
     total_tagihan_int: Optional[int] = None,
     komponen_billing: Optional[dict[str, dict[str, object]]] = None,
+    ocr_payload: Optional[dict[str, str]] = None,
 ) -> ParseBillingResponse:
     """Build a normalized response object."""
     return ParseBillingResponse(
@@ -72,6 +73,7 @@ def _build_response(
         total_tagihan_raw=total_tagihan_raw,
         total_tagihan_int=total_tagihan_int,
         komponen_billing=komponen_billing or {},
+        ocr_payload=ocr_payload or {},
         chat_id=chat_id,
         file_name=file_name,
     )
@@ -271,6 +273,7 @@ async def parse_billing(
         total_tagihan_raw=parsed.total_tagihan_raw,
         total_tagihan_int=parsed.total_tagihan_int,
         komponen_billing=parsed.komponen_billing,
+        ocr_payload=parsed.ocr_payload,
         chat_id=chat_id,
         file_name=file_name,
     )

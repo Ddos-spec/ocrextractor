@@ -24,6 +24,7 @@ class ParsedBillingFields:
     total_tagihan_raw: Optional[str]
     total_tagihan_int: Optional[int]
     komponen_billing: dict[str, dict[str, object]]
+    ocr_payload: dict[str, str]
 
 
 _NAME_STOP_KEYWORDS = (
@@ -124,6 +125,31 @@ _COMPONENT_LABELS: dict[str, str] = {
     "bmhp": "BMHP",
 }
 
+OCR_PAYLOAD_KEYS = (
+    "ruangan",
+    "pemeriksaan_dokter",
+    "asuhan_keperawatan",
+    "laboratorium",
+    "penunjang",
+    "sewa_alat",
+    "radiologi",
+    "obat",
+    "bmhp",
+    "billingan",
+    "waktu_mulai",
+    "waktu_selesai",
+    "total",
+    "koding",
+    "waktu_mulai_koding",
+    "waktu_selesai_koding",
+    "total_koding",
+    "rekap_billingan",
+    "excel",
+    "kasir",
+    "balance",
+    "link_e_klaim",
+)
+
 
 def _env_int(name: str, default: int, minimum: int = 1) -> int:
     """Read integer env var with safe fallback and lower bound."""
@@ -148,11 +174,15 @@ def _env_float(name: str, default: float, minimum: float = 0.5) -> float:
 
 
 OCR_ZOOM = _env_float("OCR_ZOOM", 1.35)
-OCR_MAX_PAGES = _env_int("OCR_MAX_PAGES", 4, minimum=1)
+OCR_MAX_PAGES = _env_int("OCR_MAX_PAGES", 0, minimum=0)
 OCR_PSM = _env_int("OCR_PSM", 6, minimum=3)
 OCR_LANG_PRIMARY = os.getenv("OCR_LANG_PRIMARY", "ind+eng")
 OCR_LANG_FALLBACK = os.getenv("OCR_LANG_FALLBACK", "eng")
-OCR_EARLY_STOP_COMPONENT_HITS = _env_int("OCR_EARLY_STOP_COMPONENT_HITS", 3, minimum=1)
+
+
+def create_empty_ocr_payload() -> dict[str, str]:
+    """Create normalized empty payload expected by downstream AI parser."""
+    return {key: "" for key in OCR_PAYLOAD_KEYS}
 
 
 def _squash_whitespace(text: str) -> str:
@@ -422,6 +452,88 @@ def extract_billing_components(text: str) -> dict[str, dict[str, object]]:
     return results
 
 
+def _append_payload_text(payload: dict[str, str], key: str, value: str) -> None:
+    """Append unique related text into payload field using ` | ` separator."""
+    normalized = _squash_whitespace(value)
+    if not normalized:
+        return
+
+    current = payload.get(key, "")
+    if not current:
+        payload[key] = normalized
+        return
+
+    existing_parts = {part.strip() for part in current.split(" | ") if part.strip()}
+    if normalized in existing_parts:
+        return
+    payload[key] = f"{current} | {normalized}"
+
+
+def extract_ocr_payload(
+    text: str,
+    *,
+    total_tagihan_raw: Optional[str],
+    komponen_billing: dict[str, dict[str, object]],
+) -> dict[str, str]:
+    """Extract broad related text snippets for downstream AI post-processing."""
+    payload = create_empty_ocr_payload()
+    lines = [_squash_whitespace(line) for line in text.splitlines() if line.strip()]
+    upper_lines = [line.upper() for line in lines]
+
+    for component_key in (
+        "ruangan",
+        "pemeriksaan_dokter",
+        "asuhan_keperawatan",
+        "laboratorium",
+        "penunjang",
+        "sewa_alat",
+        "radiologi",
+        "obat",
+        "bmhp",
+    ):
+        component = komponen_billing.get(component_key, {})
+        if bool(component.get("ditemukan")) and isinstance(component.get("nilai_raw"), str):
+            _append_payload_text(payload, component_key, component["nilai_raw"])
+
+    if total_tagihan_raw:
+        _append_payload_text(payload, "total", total_tagihan_raw)
+        _append_payload_text(payload, "billingan", total_tagihan_raw)
+
+    field_patterns: dict[str, tuple[str, ...]] = {
+        "billingan": ("RINCIAN BIAYA", "TOTAL TAGIHAN", "TOTAL BAYAR", "SISA PEMBAYARAN"),
+        "waktu_mulai": ("WAKTU MULAI", "JAM MASUK", "TGL MASUK", "TANGGAL MASUK"),
+        "waktu_selesai": ("WAKTU SELESAI", "JAM KELUAR", "TGL KELUAR", "TANGGAL KELUAR"),
+        "koding": ("KODING", "ICD", "INA-CBG", "GROUPING"),
+        "waktu_mulai_koding": ("WAKTU MULAI KODING", "MULAI KODING"),
+        "waktu_selesai_koding": ("WAKTU SELESAI KODING", "SELESAI KODING"),
+        "total_koding": ("TOTAL KODING", "TOTAL INA-CBG", "HASIL GROUPING"),
+        "rekap_billingan": ("REKAP", "PENJAMIN", "TOTAL", "RINCIAN BIAYA"),
+        "excel": ("EXCEL",),
+        "kasir": ("KASIR", "TOTAL BAYAR", "SISA PEMBAYARAN", "TUNAI"),
+        "balance": ("BALANCE", "SELISIH"),
+        "link_e_klaim": ("E-KLAIM", "EKLAIM"),
+    }
+
+    for index, upper_line in enumerate(upper_lines):
+        line = lines[index]
+        for key, patterns in field_patterns.items():
+            if any(pattern in upper_line for pattern in patterns):
+                _append_payload_text(payload, key, line)
+                if key in {"billingan", "rekap_billingan", "koding"} and index + 1 < len(lines):
+                    _append_payload_text(payload, key, lines[index + 1])
+
+    urls = re.findall(r"https?://[^\s]+", text, flags=re.IGNORECASE)
+    for url in urls:
+        _append_payload_text(payload, "link_e_klaim", url.rstrip(".,);]"))
+
+    if not payload["link_e_klaim"]:
+        for index, upper_line in enumerate(upper_lines):
+            if "E-KLAIM" in upper_line or "EKLAIM" in upper_line:
+                _append_payload_text(payload, "link_e_klaim", lines[index])
+
+    return payload
+
+
 def is_text_too_short(text: str, min_non_space_chars: int = 40) -> bool:
     """Return True when extracted text is likely empty/truncated."""
     cleaned = re.sub(r"\s+", "", text)
@@ -467,14 +579,24 @@ def _extract_text_via_ocr(pdf_bytes: bytes) -> str:
             2,
         ]
         selected: list[int] = []
+        page_limit = page_count if OCR_MAX_PAGES <= 0 else min(OCR_MAX_PAGES, page_count)
         for index in candidates:
             if index < 0 or index >= page_count:
                 continue
             if index in selected:
                 continue
             selected.append(index)
-            if len(selected) >= min(OCR_MAX_PAGES, page_count):
+            if len(selected) >= page_limit:
                 break
+
+        if len(selected) < page_limit:
+            for index in range(page_count):
+                if index in selected:
+                    continue
+                selected.append(index)
+                if len(selected) >= page_limit:
+                    break
+
         return selected
 
     page_texts = []
@@ -513,20 +635,6 @@ def _extract_text_via_ocr(pdf_bytes: bytes) -> str:
 
                 if ocr_text:
                     page_texts.append(ocr_text)
-
-                    # Stop early only when core fields and enough components are found.
-                    parsed = parse_billing_text("\n".join(page_texts))
-                    found_components = sum(
-                        1
-                        for component in parsed.komponen_billing.values()
-                        if bool(component.get("ditemukan"))
-                    )
-                    if (
-                        parsed.nama is not None
-                        and parsed.total_tagihan_int is not None
-                        and found_components >= OCR_EARLY_STOP_COMPONENT_HITS
-                    ):
-                        break
     except Exception:
         return ""
 
@@ -561,10 +669,16 @@ def parse_billing_text(text: str) -> ParsedBillingFields:
     nama = extract_nama(text)
     total_tagihan_raw, total_tagihan_int = extract_total_tagihan(text)
     komponen_billing = extract_billing_components(text)
+    ocr_payload = extract_ocr_payload(
+        text,
+        total_tagihan_raw=total_tagihan_raw,
+        komponen_billing=komponen_billing,
+    )
 
     return ParsedBillingFields(
         nama=nama,
         total_tagihan_raw=total_tagihan_raw,
         total_tagihan_int=total_tagihan_int,
         komponen_billing=komponen_billing,
+        ocr_payload=ocr_payload,
     )
