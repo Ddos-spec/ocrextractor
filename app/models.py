@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class HealthResponse(BaseModel):
@@ -30,6 +30,14 @@ class ParseBillingRequest(BaseModel):
         description="Routing identifier from n8n/Telegram workflow.",
     )
 
+    @field_validator("chat_id", mode="before")
+    @classmethod
+    def normalize_chat_id(cls, value: object) -> Optional[str]:
+        """Accept numeric chat_id inputs and normalize to string."""
+        if value is None:
+            return None
+        return str(value)
+
 
 class ParseBillingResponse(BaseModel):
     """Normalized API response for billing parsing results."""
@@ -41,4 +49,3 @@ class ParseBillingResponse(BaseModel):
     total_tagihan_int: Optional[int] = None
     chat_id: Optional[str] = None
     file_name: Optional[str] = None
-

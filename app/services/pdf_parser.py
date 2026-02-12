@@ -42,14 +42,35 @@ _NAME_STOP_KEYWORDS = (
     "RAWAT",
     "POLI",
     "RM",
+    "TOTAL",
+    "BIAYA",
+    "RINCIAN",
 )
 
-_NAME_PATTERN = re.compile(
-    r"(?is)\bNAMA(?:\s+PASIEN)?\b\s*[:\-]?\s*(.+?)(?=\b(?:TGL\.?\s*TAGIHAN|JENIS\s*KELAMIN|NO\.?\s*TAGIHAN|NO\.?\s*REKAM\s*MEDIS|ALAMAT|UMUR|DOKTER|PENJAMIN|RUANG|KELAS|NIK|DIAGNOSA|RAWAT|POLI)\b|$)"
+_NAME_PATTERNS = (
+    re.compile(
+        r"(?is)\bNO\.?\s*REKAM\s*MEDIS\b.*?\bNAMA(?:\s+PASIEN)?\b\s*[:\-]?\s*(?!RS(?:UD)?\b|RUMAH\s+SAKIT\b)(.+?)(?=\b(?:TGL\.?\s*TAGIHAN|JENIS\s*KELAMIN|NO\.?\s*TAGIHAN|NO\.?\s*REKAM\s*MEDIS|ALAMAT|UMUR|DOKTER|PENJAMIN|RUANG|KELAS|NIK|DIAGNOSA|RAWAT|POLI)\b|$)"
+    ),
+    re.compile(
+        r"(?is)\bNAMA\s+PASIEN\b\s*[:\-]?\s*(?!RS(?:UD)?\b|RUMAH\s+SAKIT\b)(.+?)(?=\b(?:TGL\.?\s*TAGIHAN|JENIS\s*KELAMIN|NO\.?\s*TAGIHAN|NO\.?\s*REKAM\s*MEDIS|ALAMAT|UMUR|DOKTER|PENJAMIN|RUANG|KELAS|NIK|DIAGNOSA|RAWAT|POLI)\b|$)"
+    ),
+    re.compile(
+        r"(?is)\bNAMA\b\s*[:\-]?\s*(?!RS(?:UD)?\b|RUMAH\s+SAKIT\b)(.+?)(?=\b(?:TGL\.?\s*TAGIHAN|JENIS\s*KELAMIN|NO\.?\s*TAGIHAN|NO\.?\s*REKAM\s*MEDIS|ALAMAT|UMUR|DOKTER|PENJAMIN|RUANG|KELAS|NIK|DIAGNOSA|RAWAT|POLI)\b|$)"
+    ),
 )
 
 _TOTAL_PATTERN = re.compile(
-    r"(?is)\bTOTAL\s*TAGIHAN\b[\s:.\-]*\b(?:RP|RUPIAH)\b[\s:.\-]*([0-9][0-9.,\s]{0,30})"
+    r"(?is)\bTOTAL\s*TAGIHAN\b[\s:.\-]*(?:(?:R\s*P)|RUPIAH)?[\s:.\-]*([0-9][0-9.,\s]{0,40})"
+)
+_AMOUNT_TOKEN_PATTERN = re.compile(r"(?<!\d)(\d{1,3}(?:[.,\s]\d{3})+(?:,\d{1,2})?|\d{5,})(?!\d)")
+
+_NAME_BLOCKLIST_PHRASES = (
+    "RUMAH SAKIT",
+    "RSUD",
+    "RS ",
+    " INSTALASI ",
+    " POLIKLINIK ",
+    " PELAYANAN ",
 )
 
 OCR_ZOOM = 2.0
@@ -109,20 +130,58 @@ def _clean_name_candidate(candidate: str) -> Optional[str]:
     return " ".join(tokens).strip()
 
 
+def _is_probable_patient_name(name: str) -> bool:
+    """Return True when extracted name is likely a patient name, not hospital metadata."""
+    normalized = f" {_squash_whitespace(name).upper()} "
+    if not normalized.strip():
+        return False
+
+    if re.search(r"\d", normalized):
+        return False
+
+    for phrase in _NAME_BLOCKLIST_PHRASES:
+        if phrase in normalized:
+            return False
+
+    tokens = [token for token in normalized.split(" ") if token]
+    if not tokens or len(tokens) > 6:
+        return False
+
+    alpha_chars = sum(1 for ch in normalized if "A" <= ch <= "Z")
+    if alpha_chars < 2:
+        return False
+
+    meaningful_tokens = [token for token in tokens if len(token) >= 2]
+    return bool(meaningful_tokens)
+
+
 def extract_nama(text: str) -> Optional[str]:
     """Extract patient name from free-form billing text."""
-    matches = _NAME_PATTERN.findall(text)
-    for candidate in matches:
-        normalized = _clean_name_candidate(candidate)
-        if normalized:
-            return normalized
-
-    for line in text.splitlines():
-        if re.search(r"(?i)\bNAMA(?:\s+PASIEN)?\b", line):
-            after_label = re.split(r"(?i)\bNAMA(?:\s+PASIEN)?\b", line, maxsplit=1)[-1]
-            normalized = _clean_name_candidate(after_label)
-            if normalized:
+    for pattern in _NAME_PATTERNS:
+        for match in pattern.finditer(text):
+            candidate = match.group(1)
+            normalized = _clean_name_candidate(candidate)
+            if normalized and _is_probable_patient_name(normalized):
                 return normalized
+
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        if not re.search(r"(?i)\bNAMA(?:\s+PASIEN)?\b", line):
+            continue
+
+        if re.search(r"(?i)\bNAMA\s+RS\b", line):
+            continue
+
+        after_label = re.split(r"(?i)\bNAMA(?:\s+PASIEN)?\b", line, maxsplit=1)[-1]
+        candidates = [after_label]
+        if not after_label.strip() and index + 1 < len(lines):
+            candidates.append(lines[index + 1])
+
+        for candidate in candidates:
+            normalized = _clean_name_candidate(candidate)
+            if normalized and _is_probable_patient_name(normalized):
+                return normalized
+
     return None
 
 
@@ -139,6 +198,28 @@ def extract_total_tagihan(text: str) -> tuple[Optional[str], Optional[int]]:
 
         selected_raw = _squash_whitespace(match.group(0))
         selected_value = parsed_amount
+
+    if selected_value is not None:
+        return selected_raw, selected_value
+
+    lines = [_squash_whitespace(line) for line in text.splitlines() if line.strip()]
+    for index, line in enumerate(lines):
+        if not re.search(r"(?i)\bTOTAL\b", line) or not re.search(r"(?i)\bTAGIHAN\b", line):
+            continue
+
+        amount_tokens = _AMOUNT_TOKEN_PATTERN.findall(line)
+        raw_phrase = line
+        if not amount_tokens and index + 1 < len(lines):
+            next_line = lines[index + 1]
+            amount_tokens = _AMOUNT_TOKEN_PATTERN.findall(next_line)
+            raw_phrase = f"{line} {next_line}"
+
+        for amount_token in amount_tokens:
+            parsed_amount = _parse_rupiah_amount(amount_token)
+            if parsed_amount is None:
+                continue
+            selected_raw = raw_phrase
+            selected_value = parsed_amount
 
     return selected_raw, selected_value
 
