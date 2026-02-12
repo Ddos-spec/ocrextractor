@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from difflib import SequenceMatcher
 import io
 import os
 import re
@@ -72,6 +73,22 @@ _NAME_BLOCKLIST_PHRASES = (
     " INSTALASI ",
     " POLIKLINIK ",
     " PELAYANAN ",
+)
+
+_NAME_TAIL_NOISE_EXACT = {
+    "TOL",
+    "TOI",
+    "TGI",
+    "T6L",
+    "7GL",
+    "N0",
+}
+_NAME_TAIL_FUZZY_TARGETS = (
+    "TGL",
+    "TAGIHAN",
+    "NO",
+    "NOMOR",
+    "RM",
 )
 
 
@@ -155,7 +172,30 @@ def _clean_name_candidate(candidate: str) -> Optional[str]:
     if not tokens:
         return None
 
+    # OCR often appends a broken label token (for example "TOL." from "TGL.").
+    while tokens and _is_tail_noise_token(tokens[-1]):
+        tokens.pop()
+    if not tokens:
+        return None
+
     return " ".join(tokens).strip()
+
+
+def _is_tail_noise_token(token: str) -> bool:
+    """Return True when a trailing name token likely comes from OCR label noise."""
+    normalized = re.sub(r"[^A-Za-z]", "", token).upper()
+    if not normalized:
+        return True
+
+    if normalized in _NAME_STOP_KEYWORDS or normalized in _NAME_TAIL_NOISE_EXACT:
+        return True
+
+    if len(normalized) <= 6:
+        for target in _NAME_TAIL_FUZZY_TARGETS:
+            if SequenceMatcher(None, normalized, target).ratio() >= 0.72:
+                return True
+
+    return False
 
 
 def _is_probable_patient_name(name: str) -> bool:
