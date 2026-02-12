@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 import re
 from dataclasses import dataclass
 from typing import Optional
@@ -73,7 +74,34 @@ _NAME_BLOCKLIST_PHRASES = (
     " PELAYANAN ",
 )
 
-OCR_ZOOM = 2.0
+
+def _env_int(name: str, default: int, minimum: int = 1) -> int:
+    """Read integer env var with safe fallback and lower bound."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return max(minimum, int(raw))
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float, minimum: float = 0.5) -> float:
+    """Read float env var with safe fallback and lower bound."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return max(minimum, float(raw))
+    except ValueError:
+        return default
+
+
+OCR_ZOOM = _env_float("OCR_ZOOM", 1.35)
+OCR_MAX_PAGES = _env_int("OCR_MAX_PAGES", 4, minimum=1)
+OCR_PSM = _env_int("OCR_PSM", 6, minimum=3)
+OCR_LANG_PRIMARY = os.getenv("OCR_LANG_PRIMARY", "ind+eng")
+OCR_LANG_FALLBACK = os.getenv("OCR_LANG_FALLBACK", "eng")
 
 
 def _squash_whitespace(text: str) -> str:
@@ -254,17 +282,50 @@ def _extract_text_via_ocr(pdf_bytes: bytes) -> str:
     except Exception:
         return ""
 
+    def target_page_indices(page_count: int) -> list[int]:
+        """Prioritize likely pages containing identity and final total."""
+        candidates = [
+            0,
+            page_count - 1,
+            page_count - 2,
+            1,
+            page_count - 3,
+            2,
+        ]
+        selected: list[int] = []
+        for index in candidates:
+            if index < 0 or index >= page_count:
+                continue
+            if index in selected:
+                continue
+            selected.append(index)
+            if len(selected) >= min(OCR_MAX_PAGES, page_count):
+                break
+        return selected
+
     page_texts = []
+    tesseract_config = f"--oem 1 --psm {OCR_PSM}"
     try:
         with fitz.open(stream=pdf_bytes, filetype="pdf") as pdf:
-            for page in pdf:
-                pix = page.get_pixmap(matrix=fitz.Matrix(OCR_ZOOM, OCR_ZOOM), alpha=False)
-                image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+            for page_index in target_page_indices(len(pdf)):
+                page = pdf.load_page(page_index)
+                pix = page.get_pixmap(
+                    matrix=fitz.Matrix(OCR_ZOOM, OCR_ZOOM),
+                    colorspace=fitz.csGRAY,
+                    alpha=False,
+                )
+                image = Image.frombytes("L", (pix.width, pix.height), pix.samples)
+
                 ocr_text: Optional[str] = None
-                for lang in ("ind+eng", "eng"):
+                for lang in (OCR_LANG_PRIMARY, OCR_LANG_FALLBACK):
                     try:
-                        candidate = pytesseract.image_to_string(image, lang=lang)
+                        candidate = pytesseract.image_to_string(
+                            image,
+                            lang=lang,
+                            config=tesseract_config,
+                        )
                     except pytesseract.TesseractNotFoundError:
+                        image.close()
                         return ""
                     except pytesseract.TesseractError:
                         continue
@@ -273,8 +334,16 @@ def _extract_text_via_ocr(pdf_bytes: bytes) -> str:
                         ocr_text = candidate
                         break
 
+                image.close()
+                del pix
+
                 if ocr_text:
                     page_texts.append(ocr_text)
+
+                    # Stop early when both target fields are already found.
+                    parsed = parse_billing_text("\n".join(page_texts))
+                    if parsed.nama is not None and parsed.total_tagihan_int is not None:
+                        break
     except Exception:
         return ""
 

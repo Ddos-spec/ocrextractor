@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import logging
+import os
+import time
 from typing import Optional
 
 from fastapi import Body, FastAPI, Request
@@ -13,6 +17,7 @@ from app.models import HealthResponse, ParseBillingRequest, ParseBillingResponse
 from app.services.downloader import DownloadError, InvalidPDFError, download_pdf
 from app.services.pdf_parser import (
     PDFTextExtractionError,
+    ParsedBillingFields,
     is_text_too_short,
     parse_billing_text,
     extract_text_from_pdf,
@@ -20,6 +25,26 @@ from app.services.pdf_parser import (
 from app.services.validation import is_valid_http_url
 
 logger = logging.getLogger("billing_parser")
+
+
+def _env_int(name: str, default: int, minimum: int = 1) -> int:
+    """Read integer env var with safe fallback and lower bound."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return max(minimum, int(raw))
+    except ValueError:
+        return default
+
+
+OCR_CONCURRENCY = _env_int("OCR_CONCURRENCY", 1, minimum=1)
+RESULT_CACHE_TTL_SECONDS = _env_int("RESULT_CACHE_TTL_SECONDS", 900, minimum=60)
+RESULT_CACHE_MAX_ITEMS = _env_int("RESULT_CACHE_MAX_ITEMS", 256, minimum=16)
+
+ocr_semaphore = asyncio.Semaphore(OCR_CONCURRENCY)
+cache_lock = asyncio.Lock()
+result_cache: dict[str, tuple[float, ParsedBillingFields]] = {}
 
 app = FastAPI(
     title="Hospital Billing Parser API",
@@ -64,6 +89,37 @@ def _bad_request(
         file_name=file_name,
     )
     return JSONResponse(status_code=400, content=payload.model_dump())
+
+
+async def _cache_get(key: str) -> Optional[ParsedBillingFields]:
+    """Fetch parsed result from in-memory cache if still valid."""
+    now = time.monotonic()
+    async with cache_lock:
+        item = result_cache.get(key)
+        if item is None:
+            return None
+
+        expires_at, value = item
+        if expires_at <= now:
+            result_cache.pop(key, None)
+            return None
+        return value
+
+
+async def _cache_set(key: str, value: ParsedBillingFields) -> None:
+    """Store parsed result in bounded in-memory cache."""
+    now = time.monotonic()
+    expires_at = now + RESULT_CACHE_TTL_SECONDS
+    async with cache_lock:
+        expired_keys = [cache_key for cache_key, (exp, _) in result_cache.items() if exp <= now]
+        for expired_key in expired_keys:
+            result_cache.pop(expired_key, None)
+
+        if len(result_cache) >= RESULT_CACHE_MAX_ITEMS:
+            oldest_key = min(result_cache, key=lambda cache_key: result_cache[cache_key][0])
+            result_cache.pop(oldest_key, None)
+
+        result_cache[key] = (expires_at, value)
 
 
 @app.exception_handler(RequestValidationError)
@@ -127,55 +183,61 @@ async def parse_billing(
     except DownloadError as exc:
         return _bad_request(str(exc), chat_id=chat_id, file_name=file_name)
 
-    try:
-        text = extract_text_from_pdf(downloaded.content)
-    except PDFTextExtractionError as exc:
-        logger.exception("PDF extraction failed: %s", exc)
-        return _build_response(
-            success=False,
-            message=f"Gagal membaca isi PDF: {exc}",
-            nama=None,
-            total_tagihan_raw=None,
-            total_tagihan_int=None,
-            chat_id=chat_id,
-            file_name=file_name,
-        )
-    except Exception:
-        logger.exception("Unexpected exception while extracting PDF text")
-        return _build_response(
-            success=False,
-            message="Terjadi kesalahan internal saat membaca PDF.",
-            nama=None,
-            total_tagihan_raw=None,
-            total_tagihan_int=None,
-            chat_id=chat_id,
-            file_name=file_name,
-        )
+    cache_key = hashlib.sha1(downloaded.content).hexdigest()
+    parsed = await _cache_get(cache_key)
+    if parsed is None:
+        try:
+            async with ocr_semaphore:
+                text = await asyncio.to_thread(extract_text_from_pdf, downloaded.content)
+        except PDFTextExtractionError as exc:
+            logger.exception("PDF extraction failed: %s", exc)
+            return _build_response(
+                success=False,
+                message=f"Gagal membaca isi PDF: {exc}",
+                nama=None,
+                total_tagihan_raw=None,
+                total_tagihan_int=None,
+                chat_id=chat_id,
+                file_name=file_name,
+            )
+        except Exception:
+            logger.exception("Unexpected exception while extracting PDF text")
+            return _build_response(
+                success=False,
+                message="Terjadi kesalahan internal saat membaca PDF.",
+                nama=None,
+                total_tagihan_raw=None,
+                total_tagihan_int=None,
+                chat_id=chat_id,
+                file_name=file_name,
+            )
 
-    if is_text_too_short(text):
-        return _build_response(
-            success=False,
-            message="Teks PDF terlalu pendek atau tidak terbaca.",
-            nama=None,
-            total_tagihan_raw=None,
-            total_tagihan_int=None,
-            chat_id=chat_id,
-            file_name=file_name,
-        )
+        if is_text_too_short(text):
+            return _build_response(
+                success=False,
+                message="Teks PDF terlalu pendek atau tidak terbaca.",
+                nama=None,
+                total_tagihan_raw=None,
+                total_tagihan_int=None,
+                chat_id=chat_id,
+                file_name=file_name,
+            )
 
-    try:
-        parsed = parse_billing_text(text)
-    except Exception:
-        logger.exception("Unexpected exception while parsing billing fields")
-        return _build_response(
-            success=False,
-            message="Terjadi kesalahan internal saat parsing dokumen.",
-            nama=None,
-            total_tagihan_raw=None,
-            total_tagihan_int=None,
-            chat_id=chat_id,
-            file_name=file_name,
-        )
+        try:
+            parsed = await asyncio.to_thread(parse_billing_text, text)
+        except Exception:
+            logger.exception("Unexpected exception while parsing billing fields")
+            return _build_response(
+                success=False,
+                message="Terjadi kesalahan internal saat parsing dokumen.",
+                nama=None,
+                total_tagihan_raw=None,
+                total_tagihan_int=None,
+                chat_id=chat_id,
+                file_name=file_name,
+            )
+
+        await _cache_set(cache_key, parsed)
 
     if parsed.nama is None and parsed.total_tagihan_int is None:
         return _build_response(
