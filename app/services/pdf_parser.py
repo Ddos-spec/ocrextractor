@@ -109,46 +109,84 @@ _NAME_TAIL_FUZZY_TARGETS = (
 )
 
 _COMPONENT_ALIASES: dict[str, tuple[str, ...]] = {
-    "ruangan": ("RUANGAN", "KAMAR", "BED", "RAWAT INAP", "IGD"),
-    "pemeriksaan_dokter": (
-        "PEMERIKSAAN DOKTER",
-        "KONSULTASI DOKTER",
-        "VISITE DOKTER",
-        "TINDAKAN DOKTER",
-        "DOKTER SPESIALIS",
-        "KONSUL DOKTER",
+    "prosedur_non_bedah": (
+        "PROSEDUR NON BEDAH",
+        "TINDAKAN NON BEDAH",
+        "TINDAKAN NON-BEDAH",
+        "KATETERISASI",
+        "ENDOSKOPI",
+        "BRONKOSKOPI",
     ),
-    "asuhan_keperawatan": ("ASUHAN KEPERAWATAN", "TINDAKAN KEPERAWATAN", "JASA PERAWAT", "KEPERAWATAN"),
-    "laboratorium": ("LABORATORIUM", "LAB ", "LABORAT"),
-    "penunjang": ("PENUNJANG", "PENUNJANG MEDIK", "USG", "ECG", "EKG", "ECHO"),
-    "sewa_alat": ("SEWA ALAT", "SEWAALAT", "SEWA ALKES"),
-    "radiologi": ("RADIOLOGI", "RONTGEN", "X-RAY", "CT SCAN", "MRI"),
-    "obat": ("OBAT", "FARMASI", "MEDIKASI", "APOTIK"),
-    "bmhp": ("BMHP", "BHP", "BAHAN MEDIS HABIS PAKAI", "ALKES", "BAHAN HABIS PAKAI"),
+    "prosedur_bedah": (
+        "PROSEDUR BEDAH",
+        "TINDAKAN BEDAH",
+        "OPERASI",
+        "KAMAR OPERASI",
+        "PEMBEDAHAN",
+    ),
+    "konsultasi": (
+        "KONSULTASI",
+        "KONSUL",
+        "VISITE",
+        "PEMERIKSAAN DOKTER",
+        "JASA DOKTER",
+        "DOKTER SPESIALIS",
+    ),
+    "tenaga_ahli": (
+        "TENAGA AHLI",
+        "NUTRISIONIS",
+        "FISIOTERAPIS",
+        "DIETISIAN",
+        "PSIKOLOG",
+        "TERAPIS",
+    ),
+    "keperawatan": (
+        "KEPERAWATAN",
+        "ASUHAN KEPERAWATAN",
+        "TINDAKAN KEPERAWATAN",
+        "JASA PERAWAT",
+        "PERAWAT",
+    ),
+    "penunjang": ("PENUNJANG", "PENUNJANG MEDIK", "EKG", "ECG", "ECHO", "HOLTER"),
+    "radiologi": ("RADIOLOGI", "RONTGEN", "X-RAY", "USG", "MRI", "CT SCAN", "ANGIOGRAM"),
+    "laboratorium": ("LABORATORIUM", "LABORAT", "HEMATOLOGI", "MIKROBIOLOGI", "PATOLOGI"),
+    "pelayanan_darah": ("PELAYANAN DARAH", "TRANSFUSI", "PRC", "PACKED RED CELL"),
+    "rehabilitasi": ("REHABILITASI", "FISIOTERAPI", "TERAPI OKUPASI", "REHAB"),
+    "kamar_akomodasi": ("KAMAR", "AKOMODASI", "RAWAT INAP", "RUANG RANAP", "BED", "ADMISI"),
+    "rawat_intensif": ("RAWAT INTENSIF", "ICU", "ICCU", "NICU", "PICU", "HCU"),
+    "obat": ("OBAT", "FARMASI", "APOTIK", "MEDIKASI"),
+    "obat_kronis": ("OBAT KRONIS", "KRONIS"),
+    "obat_kemoterapi": ("OBAT KEMOTERAPI", "KEMOTERAPI", "SITOSTATIKA"),
+    "alkes": ("ALKES", "ALAT KESEHATAN", "STENT", "IMPLAN"),
+    "bmhp": ("BMHP", "BHP", "BAHAN MEDIS HABIS PAKAI", "BAHAN HABIS PAKAI", "OKSIGEN", "ALKOHOL", "JELLY"),
+    "sewa_alat": ("SEWA ALAT", "SEWA ALKES", "VENTILATOR", "NEBULIZER", "POMPA SUNTIK", "INFUS PUMP"),
 }
 
 _COMPONENT_LABELS: dict[str, str] = {
-    "ruangan": "Ruangan",
-    "pemeriksaan_dokter": "Pemeriksaan Dokter",
-    "asuhan_keperawatan": "Asuhan Keperawatan",
-    "laboratorium": "Laboratorium",
+    "prosedur_non_bedah": "Prosedur Non Bedah",
+    "prosedur_bedah": "Prosedur Bedah",
+    "konsultasi": "Konsultasi",
+    "tenaga_ahli": "Tenaga Ahli",
+    "keperawatan": "Keperawatan",
     "penunjang": "Penunjang",
-    "sewa_alat": "Sewa Alat",
     "radiologi": "Radiologi",
+    "laboratorium": "Laboratorium",
+    "pelayanan_darah": "Pelayanan Darah",
+    "rehabilitasi": "Rehabilitasi",
+    "kamar_akomodasi": "Kamar/Akomodasi",
+    "rawat_intensif": "Rawat Intensif",
     "obat": "Obat",
+    "obat_kronis": "Obat Kronis",
+    "obat_kemoterapi": "Obat Kemoterapi",
+    "alkes": "Alkes",
     "bmhp": "BMHP",
+    "sewa_alat": "Sewa Alat",
 }
 
+COMPONENT_FIELD_KEYS = tuple(_COMPONENT_ALIASES.keys())
+
 OCR_PAYLOAD_KEYS = (
-    "ruangan",
-    "pemeriksaan_dokter",
-    "asuhan_keperawatan",
-    "laboratorium",
-    "penunjang",
-    "sewa_alat",
-    "radiologi",
-    "obat",
-    "bmhp",
+    *COMPONENT_FIELD_KEYS,
     "billingan",
     "waktu_mulai",
     "waktu_selesai",
@@ -162,6 +200,64 @@ OCR_PAYLOAD_KEYS = (
     "kasir",
     "balance",
     "link_e_klaim",
+)
+
+_EVIDENCE_MIN_SCORE: dict[str, int] = {
+    "prosedur_non_bedah": 1,
+    "prosedur_bedah": 1,
+    "konsultasi": 1,
+    "tenaga_ahli": 1,
+    "keperawatan": 1,
+    "penunjang": 1,
+    "radiologi": 1,
+    "laboratorium": 1,
+    "pelayanan_darah": 1,
+    "rehabilitasi": 1,
+    "kamar_akomodasi": 1,
+    "rawat_intensif": 1,
+    "obat": 1,
+    "obat_kronis": 1,
+    "obat_kemoterapi": 1,
+    "alkes": 1,
+    "bmhp": 1,
+    "sewa_alat": 1,
+    "billingan": 2,
+    "waktu_mulai": 2,
+    "waktu_selesai": 2,
+    "total": 3,
+    "koding": 2,
+    "waktu_mulai_koding": 2,
+    "waktu_selesai_koding": 2,
+    "total_koding": 2,
+    "rekap_billingan": 2,
+    "excel": 1,
+    "kasir": 2,
+    "balance": 2,
+    "link_e_klaim": 2,
+}
+
+_EVIDENCE_MAX_ITEMS: dict[str, int] = {
+    "billingan": 4,
+    "total": 3,
+    "koding": 4,
+    "rekap_billingan": 4,
+    "kasir": 3,
+    "balance": 2,
+    "waktu_mulai": 3,
+    "waktu_selesai": 3,
+    "waktu_mulai_koding": 2,
+    "waktu_selesai_koding": 2,
+    "total_koding": 3,
+    "link_e_klaim": 2,
+}
+
+_GENERIC_NOISE_PATTERNS = (
+    r"\bNO\.?\s*REKAM\b",
+    r"\bNO\.?\s*TAGIHAN\b",
+    r"\bNO\.?\s*JAMINAN\b",
+    r"\bNO\.?\s*SEP\b",
+    r"\bUMUR\s*HARI\b",
+    r"\bUNIT\s*LAYANAN\b",
 )
 
 
@@ -602,36 +698,115 @@ def _append_payload_text(payload: dict[str, str], key: str, value: str) -> None:
 
 def _payload_keyword_map() -> dict[str, tuple[str, ...]]:
     """Return broad keyword aliases for each OCR payload key."""
-    return {
-        "ruangan": _COMPONENT_ALIASES["ruangan"] + ("KELAS", "RUANG RANAP", "RUANG PERAWATAN"),
-        "pemeriksaan_dokter": _COMPONENT_ALIASES["pemeriksaan_dokter"] + ("VISITE",),
-        "asuhan_keperawatan": _COMPONENT_ALIASES["asuhan_keperawatan"] + ("PERAWAT",),
-        "laboratorium": _COMPONENT_ALIASES["laboratorium"] + ("DARAH", "ELEKTROLIT", "UREUM", "KREATININ"),
-        "penunjang": _COMPONENT_ALIASES["penunjang"] + ("USG", "EKG", "ECG", "ECHO"),
-        "sewa_alat": _COMPONENT_ALIASES["sewa_alat"],
-        "radiologi": _COMPONENT_ALIASES["radiologi"] + ("THORAX", "RONTGEN"),
-        "obat": _COMPONENT_ALIASES["obat"] + ("RESEP",),
-        "bmhp": _COMPONENT_ALIASES["bmhp"] + ("HABIS PAKAI",),
-        "billingan": ("RINCIAN BIAYA", "TOTAL TAGIHAN", "TOTAL BAYAR", "SISA PEMBAYARAN", "TOTAL JAMINAN"),
-        "waktu_mulai": ("WAKTU MULAI", "JAM MASUK", "TGL MASUK", "TANGGAL MASUK", "TGL. TAGIHAN"),
-        "waktu_selesai": ("WAKTU SELESAI", "JAM KELUAR", "TGL KELUAR", "TANGGAL KELUAR"),
-        "total": ("TOTAL TAGIHAN", "TOTAL TARIF", "TOTAL BIAYA", "TOTAL BAYAR"),
-        "koding": ("KODING", "ICD", "INA-CBG", "GROUPING"),
-        "waktu_mulai_koding": ("WAKTU MULAI KODING", "MULAI KODING"),
-        "waktu_selesai_koding": ("WAKTU SELESAI KODING", "SELESAI KODING"),
-        "total_koding": ("TOTAL KODING", "TOTAL INA-CBG", "HASIL GROUPING"),
-        "rekap_billingan": ("REKAP", "PENJAMIN", "TOTAL JAMINAN", "SISA PEMBAYARAN"),
-        "excel": ("EXCEL", "SPREADSHEET"),
-        "kasir": ("KASIR", "PETUGAS KASIR", "TOTAL BAYAR", "SISA PEMBAYARAN", "TUNAI"),
-        "balance": ("BALANCE", "SELISIH", "LUNAS", "SISA PEMBAYARAN"),
-        "link_e_klaim": ("E-KLAIM", "EKLAIM", "KLAIM INDIVIDUAL"),
+    component_map: dict[str, tuple[str, ...]] = {
+        key: aliases for key, aliases in _COMPONENT_ALIASES.items()
     }
+    component_map["kamar_akomodasi"] = component_map["kamar_akomodasi"] + ("KELAS", "RUANG PERAWATAN")
+    component_map["laboratorium"] = component_map["laboratorium"] + ("DARAH", "ELEKTROLIT", "UREUM", "KREATININ")
+    component_map["radiologi"] = component_map["radiologi"] + ("THORAX",)
+    component_map["obat"] = component_map["obat"] + ("RESEP",)
+
+    component_map.update(
+        {
+            "billingan": ("RINCIAN BIAYA", "TOTAL TAGIHAN", "TOTAL BAYAR", "SISA PEMBAYARAN", "TOTAL JAMINAN"),
+            "waktu_mulai": ("WAKTU MULAI", "JAM MASUK", "TGL MASUK", "TANGGAL MASUK", "TGL. TAGIHAN"),
+            "waktu_selesai": ("WAKTU SELESAI", "JAM KELUAR", "TGL KELUAR", "TANGGAL KELUAR"),
+            "total": ("TOTAL TAGIHAN", "TOTAL TARIF", "TOTAL BIAYA", "TOTAL BAYAR"),
+            "koding": ("KODING", "ICD", "INA-CBG", "GROUPING"),
+            "waktu_mulai_koding": ("WAKTU MULAI KODING", "MULAI KODING"),
+            "waktu_selesai_koding": ("WAKTU SELESAI KODING", "SELESAI KODING"),
+            "total_koding": ("TOTAL KODING", "TOTAL INA-CBG", "HASIL GROUPING"),
+            "rekap_billingan": ("REKAP", "PENJAMIN", "TOTAL JAMINAN", "SISA PEMBAYARAN"),
+            "excel": ("EXCEL", "SPREADSHEET"),
+            "kasir": ("KASIR", "PETUGAS KASIR", "TOTAL BAYAR", "SISA PEMBAYARAN", "TUNAI"),
+            "balance": ("BALANCE", "SELISIH", "LUNAS", "SISA PEMBAYARAN"),
+            "link_e_klaim": ("E-KLAIM", "EKLAIM", "KLAIM INDIVIDUAL"),
+        }
+    )
+    return component_map
+
+
+def _score_snippet_for_key(key: str, snippet: str) -> int:
+    """Score how relevant a snippet is for a payload key."""
+    normalized = _squash_whitespace(snippet)
+    if not normalized:
+        return 0
+
+    upper = normalized.upper()
+    score = 0
+    keyword_map = _payload_keyword_map()
+    keywords = keyword_map.get(key, ())
+
+    for keyword in keywords:
+        if keyword in upper:
+            score += 2 if len(keyword) >= 6 else 1
+
+    if key in COMPONENT_FIELD_KEYS:
+        if re.search(r"\bRP\.?\s*\d", upper):
+            score += 1
+
+    if key in {"total", "billingan", "rekap_billingan", "kasir", "balance"}:
+        if re.search(r"\bTOTAL\s*TAGIHAN\b", upper):
+            score += 3
+        if re.search(r"\bRP\.?\s*\d", upper):
+            score += 2
+        if "SISA PEMBAYARAN" in upper or "TOTAL BAYAR" in upper:
+            score += 2
+        if "PENJAMIN" in upper:
+            score += 1
+
+    if key in {"waktu_mulai", "waktu_selesai", "waktu_mulai_koding", "waktu_selesai_koding"}:
+        if re.search(r"\b(?:\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4})\b", normalized):
+            score += 2
+        if re.search(r"\b\d{1,2}[:\.]\d{2}(?::\d{2})?\b", normalized):
+            score += 1
+
+    if key in {"koding", "total_koding"}:
+        if re.search(r"\bINA-?CBG\b|\bICD\b|\bGROUPING\b", upper):
+            score += 3
+
+    if key == "link_e_klaim":
+        if re.search(r"https?://", normalized, flags=re.IGNORECASE):
+            score += 4
+        if "E-KLAIM" in upper or "EKLAIM" in upper:
+            score += 2
+
+    for noise_pattern in _GENERIC_NOISE_PATTERNS:
+        if re.search(noise_pattern, upper):
+            score -= 1
+
+    if len(normalized) > PAYLOAD_SNIPPET_MAX_CHARS:
+        score -= 1
+
+    return score
+
+
+def _rank_evidence_for_key(key: str, snippets: list[str], max_items: int = 8) -> list[str]:
+    """Filter and rank evidence snippets so downstream AI gets cleaner context."""
+    seen: set[str] = set()
+    scored: list[tuple[int, int, str]] = []
+    min_score = _EVIDENCE_MIN_SCORE.get(key, 1)
+
+    for snippet in snippets:
+        normalized = _squash_whitespace(snippet)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+
+        score = _score_snippet_for_key(key, normalized)
+        if score < min_score:
+            continue
+
+        scored.append((score, len(normalized), normalized))
+
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [snippet for _, _, snippet in scored[:max_items]]
 
 
 def extract_keyword_context_payload(
     text: str,
     *,
-    window: int = 1,
+    window: int = 0,
     max_hits_per_key: int = 8,
 ) -> dict[str, list[str]]:
     """Collect contextual snippets around keyword hits for each payload key."""
@@ -654,6 +829,8 @@ def extract_keyword_context_payload(
             end = min(len(lines), index + window + 1)
             snippet = _squash_whitespace(" ".join(lines[start:end]))
             if not snippet or snippet in seen:
+                continue
+            if _score_snippet_for_key(key, snippet) < _EVIDENCE_MIN_SCORE.get(key, 1):
                 continue
 
             seen.add(snippet)
@@ -684,17 +861,7 @@ def extract_ocr_payload(
     lines = [_squash_whitespace(line) for line in text.splitlines() if line.strip()]
     upper_lines = [line.upper() for line in lines]
 
-    for component_key in (
-        "ruangan",
-        "pemeriksaan_dokter",
-        "asuhan_keperawatan",
-        "laboratorium",
-        "penunjang",
-        "sewa_alat",
-        "radiologi",
-        "obat",
-        "bmhp",
-    ):
+    for component_key in COMPONENT_FIELD_KEYS:
         component = komponen_billing.get(component_key, {})
         if bool(component.get("ditemukan")) and isinstance(component.get("nilai_raw"), str):
             _append_payload_text(payload, component_key, component["nilai_raw"])
@@ -709,13 +876,17 @@ def extract_ocr_payload(
         line = lines[index]
         for key, patterns in field_patterns.items():
             if any(pattern in upper_line for pattern in patterns):
-                _append_payload_text(payload, key, line)
+                if _score_snippet_for_key(key, line) >= _EVIDENCE_MIN_SCORE.get(key, 1):
+                    _append_payload_text(payload, key, line)
                 if key in {"billingan", "rekap_billingan", "koding"} and index + 1 < len(lines):
-                    _append_payload_text(payload, key, lines[index + 1])
+                    next_line = lines[index + 1]
+                    if _score_snippet_for_key(key, next_line) >= _EVIDENCE_MIN_SCORE.get(key, 1):
+                        _append_payload_text(payload, key, next_line)
 
     contexts = keyword_context if keyword_context is not None else extract_keyword_context_payload(text)
     for key in OCR_PAYLOAD_KEYS:
-        for snippet in contexts.get(key, []):
+        ranked_contexts = _rank_evidence_for_key(key, contexts.get(key, []), max_items=8)
+        for snippet in ranked_contexts:
             _append_payload_text(payload, key, snippet)
 
     urls = re.findall(r"https?://[^\s]+", text, flags=re.IGNORECASE)
@@ -732,10 +903,9 @@ def extract_ocr_payload(
 
 def _infer_balance(text: str) -> tuple[Optional[str], list[str]]:
     """Infer billing balance status from free-form text when explicit field is missing."""
-    text_compact = _squash_whitespace(text)
-
-    if re.search(r"(?i)\bLUNAS\b", text_compact):
-        return "lunas", [text_compact]
+    lunas_match = re.search(r"(?is).{0,40}\bLUNAS\b.{0,60}", text)
+    if lunas_match:
+        return "lunas", [_squash_whitespace(lunas_match.group(0))]
 
     match = re.search(
         r"(?is)SISA\s*PEMBAYARAN.{0,40}(?:RP\.?\s*)?0(?:[.,]0+)?\b",
@@ -763,25 +933,30 @@ def build_ai_field_analysis(
     ocr_payload: dict[str, str],
 ) -> dict[str, dict[str, object]]:
     """Build per-field status map for downstream AI with value/status/evidence."""
-    component_keys = {
-        "ruangan",
-        "pemeriksaan_dokter",
-        "asuhan_keperawatan",
-        "laboratorium",
-        "penunjang",
-        "sewa_alat",
-        "radiologi",
-        "obat",
-        "bmhp",
-    }
+    component_keys = set(COMPONENT_FIELD_KEYS)
 
     analysis: dict[str, dict[str, object]] = {}
     for key in OCR_PAYLOAD_KEYS:
         payload_value = _squash_whitespace(ocr_payload.get(key, ""))
-        evidence = _split_evidence(payload_value)
+        payload_parts = _split_evidence(payload_value, max_items=40)
+        max_items = _EVIDENCE_MAX_ITEMS.get(key, 5)
+        evidence = _rank_evidence_for_key(key, payload_parts, max_items=max_items)
 
-        status = "found" if payload_value else "not_found"
-        value = payload_value
+        value = evidence[0] if evidence else None
+        status = "found" if value else "not_found"
+
+        if key == "total" and total_tagihan_raw:
+            canonical_total = _squash_whitespace(total_tagihan_raw)
+            value = canonical_total
+            evidence = [canonical_total]
+            status = "found"
+
+        if key == "billingan" and total_tagihan_raw:
+            canonical_total = _squash_whitespace(total_tagihan_raw)
+            remaining = [item for item in evidence if item != canonical_total]
+            evidence = [canonical_total] + remaining[: max(0, max_items - 1)]
+            value = canonical_total
+            status = "found"
 
         if not value and key in component_keys:
             component = komponen_billing.get(key, {})
@@ -789,9 +964,11 @@ def build_ai_field_analysis(
                 raw = component.get("nilai_raw")
                 numeric = component.get("nilai_int")
                 if isinstance(raw, str) and raw.strip():
-                    value = _squash_whitespace(raw)
-                    evidence = _split_evidence(value)
-                    status = "found"
+                    ranked_raw = _rank_evidence_for_key(key, [_squash_whitespace(raw)], max_items=1)
+                    if ranked_raw:
+                        value = ranked_raw[0]
+                        evidence = ranked_raw
+                        status = "found"
                 elif isinstance(numeric, int):
                     value = _format_rupiah(numeric)
                     evidence = []
@@ -799,9 +976,11 @@ def build_ai_field_analysis(
 
         if not value and key == "total":
             if total_tagihan_raw:
-                value = _squash_whitespace(total_tagihan_raw)
-                evidence = _split_evidence(value)
-                status = "found"
+                ranked_total = _rank_evidence_for_key(key, [_squash_whitespace(total_tagihan_raw)], max_items=1)
+                if ranked_total:
+                    value = ranked_total[0]
+                    evidence = ranked_total
+                    status = "found"
             elif isinstance(total_tagihan_int, int):
                 value = _format_rupiah(total_tagihan_int)
                 evidence = []
@@ -809,9 +988,11 @@ def build_ai_field_analysis(
 
         if not value and key == "billingan":
             if total_tagihan_raw:
-                value = _squash_whitespace(total_tagihan_raw)
-                evidence = _split_evidence(value)
-                status = "inferred"
+                ranked_billing = _rank_evidence_for_key(key, [_squash_whitespace(total_tagihan_raw)], max_items=1)
+                if ranked_billing:
+                    value = ranked_billing[0]
+                    evidence = ranked_billing
+                    status = "inferred"
 
         if not value and key == "balance":
             inferred_value, inferred_evidence = _infer_balance(text)
