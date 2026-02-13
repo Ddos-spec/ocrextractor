@@ -299,7 +299,7 @@ OCR_LANG_FALLBACK = os.getenv("OCR_LANG_FALLBACK", "eng")
 AI_BUNDLE_TEXT_MAX_CHARS = _env_int("AI_BUNDLE_TEXT_MAX_CHARS", 80000, minimum=2000)
 PAYLOAD_SNIPPET_MAX_CHARS = _env_int("PAYLOAD_SNIPPET_MAX_CHARS", 320, minimum=120)
 PAYLOAD_MAX_PARTS_PER_KEY = _env_int("PAYLOAD_MAX_PARTS_PER_KEY", 30, minimum=5)
-OCR_ENRICH_ALWAYS = _env_bool("OCR_ENRICH_ALWAYS", False)
+OCR_ENRICH_ALWAYS = _env_bool("OCR_ENRICH_ALWAYS", True)
 
 
 def create_empty_ocr_payload() -> dict[str, str]:
@@ -1140,6 +1140,9 @@ def _extract_text_via_ocr(pdf_bytes: bytes) -> str:
 
     def target_page_indices(page_count: int) -> list[int]:
         """Prioritize likely pages containing identity, totals, and components."""
+        if OCR_ENRICH_ALWAYS:
+            return list(range(page_count))
+
         middle = page_count // 2
         candidates = [
             0,
