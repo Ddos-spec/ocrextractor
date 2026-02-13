@@ -109,7 +109,7 @@ _NAME_TAIL_FUZZY_TARGETS = (
 )
 
 _COMPONENT_ALIASES: dict[str, tuple[str, ...]] = {
-    "ruangan": ("RUANGAN", "KAMAR", "BED", "RAWAT INAP", "RAWAT JALAN", "IGD"),
+    "ruangan": ("RUANGAN", "KAMAR", "BED", "RAWAT INAP", "IGD"),
     "pemeriksaan_dokter": (
         "PEMERIKSAAN DOKTER",
         "KONSULTASI DOKTER",
@@ -187,12 +187,23 @@ def _env_float(name: str, default: float, minimum: float = 0.5) -> float:
         return default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    """Read boolean env var with safe fallback."""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 OCR_ZOOM = _env_float("OCR_ZOOM", 1.35)
 OCR_MAX_PAGES = _env_int("OCR_MAX_PAGES", 0, minimum=0)
 OCR_PSM = _env_int("OCR_PSM", 6, minimum=3)
 OCR_LANG_PRIMARY = os.getenv("OCR_LANG_PRIMARY", "ind+eng")
 OCR_LANG_FALLBACK = os.getenv("OCR_LANG_FALLBACK", "eng")
 AI_BUNDLE_TEXT_MAX_CHARS = _env_int("AI_BUNDLE_TEXT_MAX_CHARS", 80000, minimum=2000)
+PAYLOAD_SNIPPET_MAX_CHARS = _env_int("PAYLOAD_SNIPPET_MAX_CHARS", 320, minimum=120)
+PAYLOAD_MAX_PARTS_PER_KEY = _env_int("PAYLOAD_MAX_PARTS_PER_KEY", 30, minimum=5)
+OCR_ENRICH_ALWAYS = _env_bool("OCR_ENRICH_ALWAYS", False)
 
 
 def create_empty_ocr_payload() -> dict[str, str]:
@@ -465,6 +476,33 @@ def _extract_amount_from_line(line: str) -> Optional[int]:
     for token in amount_tokens:
         value = _parse_rupiah_amount(token)
         if value is not None:
+            compact = re.sub(r"\s+", "", token)
+            digits_only = re.sub(r"[^\d]", "", compact)
+            has_separator = bool(re.search(r"[.,]", compact))
+            upper_line = line.upper()
+            has_rupiah_hint = bool(re.search(r"\bR\s*P\b", upper_line) or re.search(r"\bRUPIAH\b", upper_line))
+
+            if value <= 0 or value > 500_000_000:
+                continue
+            if (
+                not has_rupiah_hint
+                and not has_separator
+                and not re.search(r"\b(JUMLAH|TOTAL|SUBTOTAL)\b", upper_line)
+            ):
+                continue
+            if not has_rupiah_hint and not has_separator and len(digits_only) >= 8:
+                continue
+            if (
+                not has_rupiah_hint
+                and re.search(r"\bNO\.?\s*(TAGIHAN|REKAM|SEP|RM)\b", upper_line)
+            ):
+                continue
+            if (
+                not has_rupiah_hint
+                and re.search(r"\b(UMUR|TAHUN|HARI|TGL|TANGGAL|TELEPON|TELP|JAM MASUK|JAM KELUAR)\b", upper_line)
+            ):
+                continue
+
             parsed_values.append(value)
 
     if not parsed_values:
@@ -546,6 +584,8 @@ def _append_payload_text(payload: dict[str, str], key: str, value: str) -> None:
     normalized = _squash_whitespace(value)
     if not normalized:
         return
+    if len(normalized) > PAYLOAD_SNIPPET_MAX_CHARS:
+        normalized = f"{normalized[:PAYLOAD_SNIPPET_MAX_CHARS].rstrip()}...[TRUNCATED]"
 
     current = payload.get(key, "")
     if not current:
@@ -553,9 +593,83 @@ def _append_payload_text(payload: dict[str, str], key: str, value: str) -> None:
         return
 
     existing_parts = {part.strip() for part in current.split(" | ") if part.strip()}
+    if len(existing_parts) >= PAYLOAD_MAX_PARTS_PER_KEY:
+        return
     if normalized in existing_parts:
         return
     payload[key] = f"{current} | {normalized}"
+
+
+def _payload_keyword_map() -> dict[str, tuple[str, ...]]:
+    """Return broad keyword aliases for each OCR payload key."""
+    return {
+        "ruangan": _COMPONENT_ALIASES["ruangan"] + ("KELAS", "RUANG RANAP", "RUANG PERAWATAN"),
+        "pemeriksaan_dokter": _COMPONENT_ALIASES["pemeriksaan_dokter"] + ("VISITE",),
+        "asuhan_keperawatan": _COMPONENT_ALIASES["asuhan_keperawatan"] + ("PERAWAT",),
+        "laboratorium": _COMPONENT_ALIASES["laboratorium"] + ("DARAH", "ELEKTROLIT", "UREUM", "KREATININ"),
+        "penunjang": _COMPONENT_ALIASES["penunjang"] + ("USG", "EKG", "ECG", "ECHO"),
+        "sewa_alat": _COMPONENT_ALIASES["sewa_alat"],
+        "radiologi": _COMPONENT_ALIASES["radiologi"] + ("THORAX", "RONTGEN"),
+        "obat": _COMPONENT_ALIASES["obat"] + ("RESEP",),
+        "bmhp": _COMPONENT_ALIASES["bmhp"] + ("HABIS PAKAI",),
+        "billingan": ("RINCIAN BIAYA", "TOTAL TAGIHAN", "TOTAL BAYAR", "SISA PEMBAYARAN", "TOTAL JAMINAN"),
+        "waktu_mulai": ("WAKTU MULAI", "JAM MASUK", "TGL MASUK", "TANGGAL MASUK", "TGL. TAGIHAN"),
+        "waktu_selesai": ("WAKTU SELESAI", "JAM KELUAR", "TGL KELUAR", "TANGGAL KELUAR"),
+        "total": ("TOTAL TAGIHAN", "TOTAL TARIF", "TOTAL BIAYA", "TOTAL BAYAR"),
+        "koding": ("KODING", "ICD", "INA-CBG", "GROUPING"),
+        "waktu_mulai_koding": ("WAKTU MULAI KODING", "MULAI KODING"),
+        "waktu_selesai_koding": ("WAKTU SELESAI KODING", "SELESAI KODING"),
+        "total_koding": ("TOTAL KODING", "TOTAL INA-CBG", "HASIL GROUPING"),
+        "rekap_billingan": ("REKAP", "PENJAMIN", "TOTAL JAMINAN", "SISA PEMBAYARAN"),
+        "excel": ("EXCEL", "SPREADSHEET"),
+        "kasir": ("KASIR", "PETUGAS KASIR", "TOTAL BAYAR", "SISA PEMBAYARAN", "TUNAI"),
+        "balance": ("BALANCE", "SELISIH", "LUNAS", "SISA PEMBAYARAN"),
+        "link_e_klaim": ("E-KLAIM", "EKLAIM", "KLAIM INDIVIDUAL"),
+    }
+
+
+def extract_keyword_context_payload(
+    text: str,
+    *,
+    window: int = 1,
+    max_hits_per_key: int = 8,
+) -> dict[str, list[str]]:
+    """Collect contextual snippets around keyword hits for each payload key."""
+    lines = [_squash_whitespace(line) for line in text.splitlines() if line.strip()]
+    upper_lines = [line.upper() for line in lines]
+
+    contexts: dict[str, list[str]] = {key: [] for key in OCR_PAYLOAD_KEYS}
+    if not lines:
+        return contexts
+
+    keyword_map = _payload_keyword_map()
+    for key, keywords in keyword_map.items():
+        seen: set[str] = set()
+        snippets: list[str] = []
+        for index, upper_line in enumerate(upper_lines):
+            if not any(keyword in upper_line for keyword in keywords):
+                continue
+
+            start = max(0, index - window)
+            end = min(len(lines), index + window + 1)
+            snippet = _squash_whitespace(" ".join(lines[start:end]))
+            if not snippet or snippet in seen:
+                continue
+
+            seen.add(snippet)
+            snippets.append(snippet)
+            if len(snippets) >= max_hits_per_key:
+                break
+
+        contexts[key] = snippets
+
+    urls = re.findall(r"https?://[^\s]+", text, flags=re.IGNORECASE)
+    for url in urls:
+        cleaned_url = url.rstrip(".,);]")
+        if cleaned_url and cleaned_url not in contexts["link_e_klaim"]:
+            contexts["link_e_klaim"].append(cleaned_url)
+
+    return contexts
 
 
 def extract_ocr_payload(
@@ -563,6 +677,7 @@ def extract_ocr_payload(
     *,
     total_tagihan_raw: Optional[str],
     komponen_billing: dict[str, dict[str, object]],
+    keyword_context: Optional[dict[str, list[str]]] = None,
 ) -> dict[str, str]:
     """Extract broad related text snippets for downstream AI post-processing."""
     payload = create_empty_ocr_payload()
@@ -588,20 +703,7 @@ def extract_ocr_payload(
         _append_payload_text(payload, "total", total_tagihan_raw)
         _append_payload_text(payload, "billingan", total_tagihan_raw)
 
-    field_patterns: dict[str, tuple[str, ...]] = {
-        "billingan": ("RINCIAN BIAYA", "TOTAL TAGIHAN", "TOTAL BAYAR", "SISA PEMBAYARAN"),
-        "waktu_mulai": ("WAKTU MULAI", "JAM MASUK", "TGL MASUK", "TANGGAL MASUK"),
-        "waktu_selesai": ("WAKTU SELESAI", "JAM KELUAR", "TGL KELUAR", "TANGGAL KELUAR"),
-        "koding": ("KODING", "ICD", "INA-CBG", "GROUPING"),
-        "waktu_mulai_koding": ("WAKTU MULAI KODING", "MULAI KODING"),
-        "waktu_selesai_koding": ("WAKTU SELESAI KODING", "SELESAI KODING"),
-        "total_koding": ("TOTAL KODING", "TOTAL INA-CBG", "HASIL GROUPING"),
-        "rekap_billingan": ("REKAP", "PENJAMIN", "TOTAL", "RINCIAN BIAYA"),
-        "excel": ("EXCEL",),
-        "kasir": ("KASIR", "TOTAL BAYAR", "SISA PEMBAYARAN", "TUNAI"),
-        "balance": ("BALANCE", "SELISIH"),
-        "link_e_klaim": ("E-KLAIM", "EKLAIM"),
-    }
+    field_patterns = _payload_keyword_map()
 
     for index, upper_line in enumerate(upper_lines):
         line = lines[index]
@@ -610,6 +712,11 @@ def extract_ocr_payload(
                 _append_payload_text(payload, key, line)
                 if key in {"billingan", "rekap_billingan", "koding"} and index + 1 < len(lines):
                     _append_payload_text(payload, key, lines[index + 1])
+
+    contexts = keyword_context if keyword_context is not None else extract_keyword_context_payload(text)
+    for key in OCR_PAYLOAD_KEYS:
+        for snippet in contexts.get(key, []):
+            _append_payload_text(payload, key, snippet)
 
     urls = re.findall(r"https?://[^\s]+", text, flags=re.IGNORECASE)
     for url in urls:
@@ -738,23 +845,25 @@ def build_ai_bundle(
     komponen_billing: dict[str, dict[str, object]],
     ocr_payload: dict[str, str],
     ai_field_analysis: dict[str, dict[str, object]],
+    keyword_context: dict[str, list[str]],
 ) -> dict[str, object]:
     """Build a single AI-ready package containing all extracted context."""
     raw_text, truncated = _truncate_for_bundle(text)
     return {
-        "schema_version": "v1",
+        "schema_version": "v2",
         "source": "hospital_billing_ocr",
         "raw_text": raw_text,
         "raw_text_truncated": truncated,
         "raw_text_chars": len(text),
-        "normalized": {
+        "ringkasan_terstruktur": {
             "nama": nama,
             "total_tagihan_raw": total_tagihan_raw,
             "total_tagihan_int": total_tagihan_int,
+            "komponen_billing": komponen_billing,
         },
-        "komponen_billing": komponen_billing,
-        "ocr_payload": ocr_payload,
-        "ai_field_analysis": ai_field_analysis,
+        "field_mentah": ocr_payload,
+        "field_status": ai_field_analysis,
+        "keyword_context": keyword_context,
     }
 
 
@@ -777,6 +886,66 @@ def _extract_text_via_pdfplumber(pdf_bytes: bytes) -> str:
         raise PDFTextExtractionError(f"Tidak bisa membaca isi PDF: {exc}") from exc
 
     return "\n".join(page_texts).strip()
+
+
+def _extract_text_via_pymupdf(pdf_bytes: bytes) -> str:
+    """Extract machine-readable text from PDF pages using PyMuPDF."""
+    try:
+        import fitz  # type: ignore[import-not-found]
+    except Exception:
+        return ""
+
+    try:
+        page_texts: list[str] = []
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as pdf:
+            for page in pdf:
+                page_text = page.get_text("text") or ""
+                if page_text.strip():
+                    page_texts.append(page_text)
+    except Exception:
+        return ""
+
+    return "\n".join(page_texts).strip()
+
+
+def _merge_text_sources(*sources: str) -> str:
+    """Merge multiple OCR/text sources while deduplicating repeated lines."""
+    seen: set[str] = set()
+    merged_lines: list[str] = []
+    for source in sources:
+        if not source:
+            continue
+        for line in source.splitlines():
+            normalized = _squash_whitespace(line)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            merged_lines.append(normalized)
+    return "\n".join(merged_lines).strip()
+
+
+def _needs_ocr_enrichment(text: str) -> bool:
+    """Decide whether OCR should be used to enrich extracted text."""
+    if OCR_ENRICH_ALWAYS:
+        return True
+    if is_text_too_short(text):
+        return True
+
+    upper = text.upper()
+    critical_markers = (
+        "NAMA",
+        "TOTAL TAGIHAN",
+        "RINCIAN BIAYA",
+        "NO TAGIHAN",
+        "NO. TAGIHAN",
+        "NO REKAM MEDIS",
+        "NO. REKAM MEDIS",
+    )
+    marker_hits = sum(1 for marker in critical_markers if marker in upper)
+    if marker_hits >= 2:
+        return False
+
+    return True
 
 
 def _extract_text_via_ocr(pdf_bytes: bytes) -> str:
@@ -868,24 +1037,26 @@ def _extract_text_via_ocr(pdf_bytes: bytes) -> str:
 def extract_text_from_pdf(pdf_bytes: bytes) -> str:
     """Read PDF text, then fallback to OCR for image-based files."""
     extraction_error: Optional[PDFTextExtractionError] = None
-    text = ""
+    primary_text = ""
+    secondary_text = ""
     try:
-        text = _extract_text_via_pdfplumber(pdf_bytes)
+        primary_text = _extract_text_via_pdfplumber(pdf_bytes)
     except PDFTextExtractionError as exc:
         extraction_error = exc
 
-    if not is_text_too_short(text):
-        return text
+    secondary_text = _extract_text_via_pymupdf(pdf_bytes)
+    merged_text = _merge_text_sources(primary_text, secondary_text)
+
+    if not _needs_ocr_enrichment(merged_text):
+        return merged_text
 
     ocr_text = _extract_text_via_ocr(pdf_bytes)
     if not ocr_text:
-        if extraction_error is not None and not text:
+        if extraction_error is not None and not merged_text:
             raise extraction_error
-        return text
+        return merged_text
 
-    if text:
-        return f"{text}\n{ocr_text}".strip()
-    return ocr_text
+    return _merge_text_sources(merged_text, ocr_text)
 
 
 def parse_billing_text(text: str) -> ParsedBillingFields:
@@ -893,10 +1064,12 @@ def parse_billing_text(text: str) -> ParsedBillingFields:
     nama = extract_nama(text)
     total_tagihan_raw, total_tagihan_int = extract_total_tagihan(text)
     komponen_billing = extract_billing_components(text)
+    keyword_context = extract_keyword_context_payload(text)
     ocr_payload = extract_ocr_payload(
         text,
         total_tagihan_raw=total_tagihan_raw,
         komponen_billing=komponen_billing,
+        keyword_context=keyword_context,
     )
     ai_field_analysis = build_ai_field_analysis(
         text,
@@ -913,6 +1086,7 @@ def parse_billing_text(text: str) -> ParsedBillingFields:
         komponen_billing=komponen_billing,
         ocr_payload=ocr_payload,
         ai_field_analysis=ai_field_analysis,
+        keyword_context=keyword_context,
     )
 
     return ParsedBillingFields(

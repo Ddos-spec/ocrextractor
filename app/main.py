@@ -59,24 +59,12 @@ def _build_response(
     message: str,
     chat_id: Optional[str],
     file_name: Optional[str],
-    nama: Optional[str] = None,
-    total_tagihan_raw: Optional[str] = None,
-    total_tagihan_int: Optional[int] = None,
-    komponen_billing: Optional[dict[str, dict[str, object]]] = None,
-    ocr_payload: Optional[dict[str, str]] = None,
-    ai_field_analysis: Optional[dict[str, dict[str, object]]] = None,
     ai_bundle: Optional[dict[str, object]] = None,
 ) -> ParseBillingResponse:
     """Build a normalized response object."""
     return ParseBillingResponse(
         success=success,
         message=message,
-        nama=nama,
-        total_tagihan_raw=total_tagihan_raw,
-        total_tagihan_int=total_tagihan_int,
-        komponen_billing=komponen_billing or {},
-        ocr_payload=ocr_payload or {},
-        ai_field_analysis=ai_field_analysis or {},
         ai_bundle=ai_bundle or {},
         chat_id=chat_id,
         file_name=file_name,
@@ -202,9 +190,6 @@ async def parse_billing(
             return _build_response(
                 success=False,
                 message=f"Gagal membaca isi PDF: {exc}",
-                nama=None,
-                total_tagihan_raw=None,
-                total_tagihan_int=None,
                 chat_id=chat_id,
                 file_name=file_name,
             )
@@ -213,9 +198,6 @@ async def parse_billing(
             return _build_response(
                 success=False,
                 message="Terjadi kesalahan internal saat membaca PDF.",
-                nama=None,
-                total_tagihan_raw=None,
-                total_tagihan_int=None,
                 chat_id=chat_id,
                 file_name=file_name,
             )
@@ -224,9 +206,6 @@ async def parse_billing(
             return _build_response(
                 success=False,
                 message="Teks PDF terlalu pendek atau tidak terbaca.",
-                nama=None,
-                total_tagihan_raw=None,
-                total_tagihan_int=None,
                 chat_id=chat_id,
                 file_name=file_name,
             )
@@ -238,9 +217,6 @@ async def parse_billing(
             return _build_response(
                 success=False,
                 message="Terjadi kesalahan internal saat parsing dokumen.",
-                nama=None,
-                total_tagihan_raw=None,
-                total_tagihan_int=None,
                 chat_id=chat_id,
                 file_name=file_name,
             )
@@ -256,11 +232,19 @@ async def parse_billing(
         return _build_response(
             success=False,
             message="Gagal menemukan nama dan total tagihan di dokumen.",
-            nama=None,
-            total_tagihan_raw=None,
-            total_tagihan_int=None,
             chat_id=chat_id,
             file_name=file_name,
+            ai_bundle={
+                "schema_version": "v2",
+                "source": "hospital_billing_ocr",
+                "request_context": {"chat_id": chat_id, "file_name": file_name},
+                "ringkasan_terstruktur": {
+                    "nama": None,
+                    "total_tagihan_raw": None,
+                    "total_tagihan_int": None,
+                    "komponen_billing": parsed.komponen_billing,
+                },
+            },
         )
 
     if parsed.nama is not None and parsed.total_tagihan_int is not None:
@@ -270,16 +254,16 @@ async def parse_billing(
     else:
         message = "Berhasil ekstrak sebagian data billing."
 
+    ai_bundle = dict(parsed.ai_bundle)
+    ai_bundle["request_context"] = {
+        "chat_id": chat_id,
+        "file_name": file_name,
+    }
+
     return _build_response(
         success=True,
         message=message,
-        nama=parsed.nama,
-        total_tagihan_raw=parsed.total_tagihan_raw,
-        total_tagihan_int=parsed.total_tagihan_int,
-        komponen_billing=parsed.komponen_billing,
-        ocr_payload=parsed.ocr_payload,
-        ai_field_analysis=parsed.ai_field_analysis,
-        ai_bundle=parsed.ai_bundle,
+        ai_bundle=ai_bundle,
         chat_id=chat_id,
         file_name=file_name,
     )
