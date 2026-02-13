@@ -25,12 +25,15 @@ class ParsedBillingFields:
     total_tagihan_int: Optional[int]
     komponen_billing: dict[str, dict[str, object]]
     ocr_payload: dict[str, str]
+    ai_field_analysis: dict[str, dict[str, object]]
     ai_bundle: dict[str, object]
 
 
 _NAME_STOP_KEYWORDS = (
     "TGL",
     "TAGIHAN",
+    "CARA",
+    "BAYAR",
     "JENIS",
     "KELAMIN",
     "NO",
@@ -54,13 +57,13 @@ _NAME_STOP_KEYWORDS = (
 
 _NAME_PATTERNS = (
     re.compile(
-        r"(?is)\bNO\.?\s*REKAM\s*MEDIS\b.*?\bNAMA(?:\s+PASIEN)?\b\s*[:\-]?\s*(?!RS(?:UD)?\b|RUMAH\s+SAKIT\b)(.+?)(?=\b(?:TGL\.?\s*TAGIHAN|JENIS\s*KELAMIN|NO\.?\s*TAGIHAN|NO\.?\s*REKAM\s*MEDIS|ALAMAT|UMUR|DOKTER|PENJAMIN|RUANG|KELAS|NIK|DIAGNOSA|RAWAT|POLI)\b|$)"
+        r"(?is)\bNO\.?\s*REKAM\s*MEDIS\b.*?\bNAMA(?:\s+PASIEN)?\b\s*[:\-]?\s*(?!RS(?:UD)?\b|RUMAH\s+SAKIT\b)(.+?)(?=\b(?:TGL\.?\s*TAGIHAN|CARA\s*BAYAR|JENIS\s*KELAMIN|NO\.?\s*TAGIHAN|NO\.?\s*REKAM\s*MEDIS|ALAMAT|UMUR|DOKTER|PENJAMIN|RUANG|KELAS|NIK|DIAGNOSA|RAWAT|POLI)\b|$)"
     ),
     re.compile(
-        r"(?is)\bNAMA\s+PASIEN\b\s*[:\-]?\s*(?!RS(?:UD)?\b|RUMAH\s+SAKIT\b)(.+?)(?=\b(?:TGL\.?\s*TAGIHAN|JENIS\s*KELAMIN|NO\.?\s*TAGIHAN|NO\.?\s*REKAM\s*MEDIS|ALAMAT|UMUR|DOKTER|PENJAMIN|RUANG|KELAS|NIK|DIAGNOSA|RAWAT|POLI)\b|$)"
+        r"(?is)\bNAMA\s+PASIEN\b\s*[:\-]?\s*(?!RS(?:UD)?\b|RUMAH\s+SAKIT\b)(.+?)(?=\b(?:TGL\.?\s*TAGIHAN|CARA\s*BAYAR|JENIS\s*KELAMIN|NO\.?\s*TAGIHAN|NO\.?\s*REKAM\s*MEDIS|ALAMAT|UMUR|DOKTER|PENJAMIN|RUANG|KELAS|NIK|DIAGNOSA|RAWAT|POLI)\b|$)"
     ),
     re.compile(
-        r"(?is)\bNAMA\b\s*[:\-]?\s*(?!RS(?:UD)?\b|RUMAH\s+SAKIT\b)(.+?)(?=\b(?:TGL\.?\s*TAGIHAN|JENIS\s*KELAMIN|NO\.?\s*TAGIHAN|NO\.?\s*REKAM\s*MEDIS|ALAMAT|UMUR|DOKTER|PENJAMIN|RUANG|KELAS|NIK|DIAGNOSA|RAWAT|POLI)\b|$)"
+        r"(?is)\bNAMA\b\s*[:\-]?\s*(?!RS(?:UD)?\b|RUMAH\s+SAKIT\b)(.+?)(?=\b(?:TGL\.?\s*TAGIHAN|CARA\s*BAYAR|JENIS\s*KELAMIN|NO\.?\s*TAGIHAN|NO\.?\s*REKAM\s*MEDIS|ALAMAT|UMUR|DOKTER|PENJAMIN|RUANG|KELAS|NIK|DIAGNOSA|RAWAT|POLI)\b|$)"
     ),
 )
 
@@ -78,6 +81,16 @@ _NAME_BLOCKLIST_PHRASES = (
     " POLIKLINIK ",
     " PELAYANAN ",
 )
+_NAME_EXACT_BLOCKLIST = {
+    "PASIEN",
+    "KELUARGA PASIEN",
+    "PASIEN KELUARGA PASIEN",
+    "PASIEN KELUARGA",
+    "PESERTA",
+    "PESERTA MANDIRI",
+    "PEKERJA MANDIRI",
+    "PBI JAMINAN KESEHATAN",
+}
 
 _NAME_TAIL_NOISE_EXACT = {
     "TOL",
@@ -195,6 +208,31 @@ def _truncate_for_bundle(text: str) -> tuple[str, bool]:
     return f"{trimmed}\n...[TRUNCATED]...", True
 
 
+def _format_rupiah(value: int) -> str:
+    """Format integer rupiah value using Indonesian thousands separators."""
+    return f"Rp {value:,}".replace(",", ".")
+
+
+def _split_evidence(payload_value: str, max_items: int = 10) -> list[str]:
+    """Split `a | b | c` payload into unique evidence snippets."""
+    if not payload_value:
+        return []
+
+    seen: set[str] = set()
+    evidence: list[str] = []
+    for chunk in payload_value.split(" | "):
+        normalized = _squash_whitespace(chunk)
+        if not normalized:
+            continue
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        evidence.append(normalized)
+        if len(evidence) >= max_items:
+            break
+    return evidence
+
+
 def _squash_whitespace(text: str) -> str:
     """Collapse repeated whitespace into single spaces."""
     return re.sub(r"\s+", " ", text).strip()
@@ -216,6 +254,34 @@ def _parse_rupiah_amount(amount_token: str) -> Optional[int]:
         return None
 
     return int(digits)
+
+
+def _is_valid_total_candidate(amount_token: str, parsed_amount: int, context: str) -> bool:
+    """Validate total billing candidate and reject common false positives."""
+    if parsed_amount <= 0 or parsed_amount > 999_999_999:
+        return False
+
+    compact_token = re.sub(r"\s+", "", amount_token)
+    digits_only = re.sub(r"[^\d]", "", compact_token)
+    has_separator = bool(re.search(r"[.,]", compact_token))
+
+    normalized_context = _squash_whitespace(context).upper()
+    has_rupiah_hint = bool(
+        re.search(r"\bR\s*P\b", normalized_context) or re.search(r"\bRUPIAH\b", normalized_context)
+    )
+
+    if "NO TAGIHAN" in normalized_context or "NO. TAGIHAN" in normalized_context:
+        return False
+    if "RAWAT JALAN [" in normalized_context or "RAWAT INAP [" in normalized_context:
+        return False
+
+    if not has_rupiah_hint and not has_separator:
+        return False
+
+    if not has_separator and len(digits_only) >= 9 and not has_rupiah_hint:
+        return False
+
+    return True
 
 
 def _clean_name_candidate(candidate: str) -> Optional[str]:
@@ -281,6 +347,9 @@ def _is_probable_patient_name(name: str) -> bool:
     if re.search(r"\d", normalized):
         return False
 
+    if normalized.strip() in _NAME_EXACT_BLOCKLIST:
+        return False
+
     for phrase in _NAME_BLOCKLIST_PHRASES:
         if phrase in normalized:
             return False
@@ -338,7 +407,11 @@ def extract_total_tagihan(text: str) -> tuple[Optional[str], Optional[int]]:
         if parsed_amount is None:
             continue
 
-        selected_raw = _squash_whitespace(match.group(0))
+        candidate_raw = _squash_whitespace(match.group(0))
+        if not _is_valid_total_candidate(amount_token, parsed_amount, candidate_raw):
+            continue
+
+        selected_raw = candidate_raw
         selected_value = parsed_amount
 
     if selected_value is not None:
@@ -349,16 +422,22 @@ def extract_total_tagihan(text: str) -> tuple[Optional[str], Optional[int]]:
         if not re.search(r"(?i)\bTOTAL\b", line) or not re.search(r"(?i)\bTAGIHAN\b", line):
             continue
 
-        amount_tokens = _AMOUNT_TOKEN_PATTERN.findall(line)
+        amount_tokens = _RUPIAH_INLINE_PATTERN.findall(line)
+        if not amount_tokens:
+            amount_tokens = _AMOUNT_TOKEN_PATTERN.findall(line)
         raw_phrase = line
         if not amount_tokens and index + 1 < len(lines):
             next_line = lines[index + 1]
-            amount_tokens = _AMOUNT_TOKEN_PATTERN.findall(next_line)
+            amount_tokens = _RUPIAH_INLINE_PATTERN.findall(next_line)
+            if not amount_tokens:
+                amount_tokens = _AMOUNT_TOKEN_PATTERN.findall(next_line)
             raw_phrase = f"{line} {next_line}"
 
         for amount_token in amount_tokens:
             parsed_amount = _parse_rupiah_amount(amount_token)
             if parsed_amount is None:
+                continue
+            if not _is_valid_total_candidate(amount_token, parsed_amount, raw_phrase):
                 continue
             selected_raw = raw_phrase
             selected_value = parsed_amount
@@ -544,6 +623,112 @@ def extract_ocr_payload(
     return payload
 
 
+def _infer_balance(text: str) -> tuple[Optional[str], list[str]]:
+    """Infer billing balance status from free-form text when explicit field is missing."""
+    text_compact = _squash_whitespace(text)
+
+    if re.search(r"(?i)\bLUNAS\b", text_compact):
+        return "lunas", [text_compact]
+
+    match = re.search(
+        r"(?is)SISA\s*PEMBAYARAN.{0,40}(?:RP\.?\s*)?0(?:[.,]0+)?\b",
+        text,
+    )
+    if match:
+        return "lunas", [_squash_whitespace(match.group(0))]
+
+    match = re.search(
+        r"(?is)TOTAL\s*BAYAR(?:/|\s+)?\s*TUNAI.{0,30}(?:RP\.?\s*)?0(?:[.,]0+)?\b",
+        text,
+    )
+    if match:
+        return "lunas", [_squash_whitespace(match.group(0))]
+
+    return None, []
+
+
+def build_ai_field_analysis(
+    text: str,
+    *,
+    total_tagihan_raw: Optional[str],
+    total_tagihan_int: Optional[int],
+    komponen_billing: dict[str, dict[str, object]],
+    ocr_payload: dict[str, str],
+) -> dict[str, dict[str, object]]:
+    """Build per-field status map for downstream AI with value/status/evidence."""
+    component_keys = {
+        "ruangan",
+        "pemeriksaan_dokter",
+        "asuhan_keperawatan",
+        "laboratorium",
+        "penunjang",
+        "sewa_alat",
+        "radiologi",
+        "obat",
+        "bmhp",
+    }
+
+    analysis: dict[str, dict[str, object]] = {}
+    for key in OCR_PAYLOAD_KEYS:
+        payload_value = _squash_whitespace(ocr_payload.get(key, ""))
+        evidence = _split_evidence(payload_value)
+
+        status = "found" if payload_value else "not_found"
+        value = payload_value
+
+        if not value and key in component_keys:
+            component = komponen_billing.get(key, {})
+            if bool(component.get("ditemukan")):
+                raw = component.get("nilai_raw")
+                numeric = component.get("nilai_int")
+                if isinstance(raw, str) and raw.strip():
+                    value = _squash_whitespace(raw)
+                    evidence = _split_evidence(value)
+                    status = "found"
+                elif isinstance(numeric, int):
+                    value = _format_rupiah(numeric)
+                    evidence = []
+                    status = "inferred"
+
+        if not value and key == "total":
+            if total_tagihan_raw:
+                value = _squash_whitespace(total_tagihan_raw)
+                evidence = _split_evidence(value)
+                status = "found"
+            elif isinstance(total_tagihan_int, int):
+                value = _format_rupiah(total_tagihan_int)
+                evidence = []
+                status = "inferred"
+
+        if not value and key == "billingan":
+            if total_tagihan_raw:
+                value = _squash_whitespace(total_tagihan_raw)
+                evidence = _split_evidence(value)
+                status = "inferred"
+
+        if not value and key == "balance":
+            inferred_value, inferred_evidence = _infer_balance(text)
+            if inferred_value:
+                value = inferred_value
+                evidence = inferred_evidence
+                status = "inferred"
+
+        if not value and key == "link_e_klaim":
+            mention = re.search(r"(?is)\bE-?KLAIM\b.{0,80}", text)
+            if mention:
+                value = "referensi e-klaim tanpa URL"
+                evidence = [_squash_whitespace(mention.group(0))]
+                status = "inferred"
+
+        analysis[key] = {
+            "value": value,
+            "status": status,
+            "evidence": evidence,
+        }
+
+    return analysis
+
+
 def build_ai_bundle(
     text: str,
     *,
@@ -552,6 +737,7 @@ def build_ai_bundle(
     total_tagihan_int: Optional[int],
     komponen_billing: dict[str, dict[str, object]],
     ocr_payload: dict[str, str],
+    ai_field_analysis: dict[str, dict[str, object]],
 ) -> dict[str, object]:
     """Build a single AI-ready package containing all extracted context."""
     raw_text, truncated = _truncate_for_bundle(text)
@@ -568,6 +754,7 @@ def build_ai_bundle(
         },
         "komponen_billing": komponen_billing,
         "ocr_payload": ocr_payload,
+        "ai_field_analysis": ai_field_analysis,
     }
 
 
@@ -711,6 +898,13 @@ def parse_billing_text(text: str) -> ParsedBillingFields:
         total_tagihan_raw=total_tagihan_raw,
         komponen_billing=komponen_billing,
     )
+    ai_field_analysis = build_ai_field_analysis(
+        text,
+        total_tagihan_raw=total_tagihan_raw,
+        total_tagihan_int=total_tagihan_int,
+        komponen_billing=komponen_billing,
+        ocr_payload=ocr_payload,
+    )
     ai_bundle = build_ai_bundle(
         text,
         nama=nama,
@@ -718,6 +912,7 @@ def parse_billing_text(text: str) -> ParsedBillingFields:
         total_tagihan_int=total_tagihan_int,
         komponen_billing=komponen_billing,
         ocr_payload=ocr_payload,
+        ai_field_analysis=ai_field_analysis,
     )
 
     return ParsedBillingFields(
@@ -726,5 +921,6 @@ def parse_billing_text(text: str) -> ParsedBillingFields:
         total_tagihan_int=total_tagihan_int,
         komponen_billing=komponen_billing,
         ocr_payload=ocr_payload,
+        ai_field_analysis=ai_field_analysis,
         ai_bundle=ai_bundle,
     )

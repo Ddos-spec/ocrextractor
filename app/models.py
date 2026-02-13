@@ -49,6 +49,7 @@ class ParseBillingResponse(BaseModel):
     total_tagihan_int: Optional[int] = None
     komponen_billing: dict[str, dict[str, object]] = Field(default_factory=dict)
     ocr_payload: dict[str, str] = Field(default_factory=dict)
+    ai_field_analysis: dict[str, dict[str, object]] = Field(default_factory=dict)
     ai_bundle: dict[str, object] = Field(default_factory=dict)
     chat_id: Optional[str] = None
     file_name: Optional[str] = None
