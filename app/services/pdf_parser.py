@@ -2292,6 +2292,7 @@ def build_ai_bundle(
         "schema_version": "v2",
         "source": "hospital_billing_ocr",
         "raw_text": raw_text,
+        "raw_text_full": text,
         "raw_text_truncated": truncated,
         "raw_text_chars": len(text),
         "document_scope": "selected_billing_segment",

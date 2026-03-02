@@ -44,6 +44,6 @@ class ParseBillingResponse(BaseModel):
 
     success: bool
     message: str
-    ai_bundle: dict[str, object] = Field(default_factory=dict)
+    bahanmentahekstrak: dict[str, object] = Field(default_factory=dict)
     chat_id: Optional[str] = None
     file_name: Optional[str] = None

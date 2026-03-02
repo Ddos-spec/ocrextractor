@@ -62,10 +62,15 @@ def _build_response(
     ai_bundle: Optional[dict[str, object]] = None,
 ) -> ParseBillingResponse:
     """Build a normalized response object."""
+    bundle = ai_bundle or {}
+    output = bundle.get("raw_text_full", bundle.get("raw_text", ""))
+    if not isinstance(output, str):
+        output = ""
+    bahanmentahekstrak = {"output": output}
     return ParseBillingResponse(
         success=success,
         message=message,
-        ai_bundle=ai_bundle or {},
+        bahanmentahekstrak=bahanmentahekstrak,
         chat_id=chat_id,
         file_name=file_name,
     )
