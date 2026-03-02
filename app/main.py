@@ -182,9 +182,12 @@ async def parse_billing(
     cache_key = hashlib.sha1(downloaded.content).hexdigest()
     parsed = await _cache_get(cache_key)
     if parsed is None:
+        extraction_diagnostics: Optional[dict[str, object]] = None
         try:
             async with ocr_semaphore:
-                text = await asyncio.to_thread(extract_text_from_pdf, downloaded.content)
+                extraction_result = await asyncio.to_thread(extract_text_from_pdf, downloaded.content)
+                text = extraction_result.text
+                extraction_diagnostics = extraction_result.diagnostics
         except PDFTextExtractionError as exc:
             logger.exception("PDF extraction failed: %s", exc)
             return _build_response(
@@ -211,7 +214,11 @@ async def parse_billing(
             )
 
         try:
-            parsed = await asyncio.to_thread(parse_billing_text, text)
+            parsed = await asyncio.to_thread(
+                parse_billing_text,
+                text,
+                extraction_diagnostics=extraction_diagnostics,
+            )
         except Exception:
             logger.exception("Unexpected exception while parsing billing fields")
             return _build_response(
@@ -259,6 +266,17 @@ async def parse_billing(
         "chat_id": chat_id,
         "file_name": file_name,
     }
+    safe_summary = ai_bundle.get("ringkasan_final", {})
+    safe_approved = isinstance(safe_summary, dict) and bool(safe_summary.get("approved"))
+
+    if not safe_approved:
+        return _build_response(
+            success=False,
+            message="Dokumen terbaca, tetapi belum aman untuk otomatisasi. Perlu review manual.",
+            ai_bundle=ai_bundle,
+            chat_id=chat_id,
+            file_name=file_name,
+        )
 
     return _build_response(
         success=True,

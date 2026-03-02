@@ -1,1 +1,382 @@
-file asal
+FILE: 0496R0530625V000435.pdf
+
+DOCUMENT_PROFILE: rajal
+
+EXTRACTION_DIAGNOSTICS:
+{'pipeline_version': 'v2.1',
+ 'source_mode': 'ocr_only',
+ 'ocr_attempted': True,
+ 'ocr_used': True,
+ 'machine_readable_detected': False,
+ 'text_chars': {'pdfplumber': 0, 'pymupdf': 0, 'ocr': 4636, 'merged': 4636}}
+
+RINGKASAN_FINAL:
+{'approved': True,
+ 'status': 'approved',
+ 'nama': 'NAHROWI',
+ 'profil_dokumen': 'rajal',
+ 'jenis_layanan': 'rajal',
+ 'total_tagihan_raw': 'Total Tagihan Rp. 225,372',
+ 'total_tagihan_int': 225372,
+ 'komponen_billing': {'prosedur_non_bedah': {'label': 'Prosedur Non Bedah',
+                                             'ditemukan': True,
+                                             'nilai_raw': 'Pemasangan Infus '
+                                                          'Standar 28/06/2025 '
+                                                          '18:33:15 1.00 Rp. '
+                                                          '10.000 Rp. 10.000',
+                                             'nilai_int': 45000},
+                      'prosedur_bedah': {'label': 'Prosedur Bedah',
+                                         'ditemukan': False,
+                                         'nilai_raw': None,
+                                         'nilai_int': None},
+                      'konsultasi': {'label': 'Konsultasi',
+                                     'ditemukan': True,
+                                     'nilai_raw': 'Feat nnn Dokder Umum '
+                                                  '28/06/2025 15:32:54 1,00 '
+                                                  'Rp. 85000 Rp. 85.000',
+                                     'nilai_int': 85000},
+                      'tenaga_ahli': {'label': 'Tenaga Ahli',
+                                      'ditemukan': False,
+                                      'nilai_raw': None,
+                                      'nilai_int': None},
+                      'keperawatan': {'label': 'Keperawatan',
+                                      'ditemukan': False,
+                                      'nilai_raw': None,
+                                      'nilai_int': None},
+                      'penunjang': {'label': 'Penunjang',
+                                    'ditemukan': True,
+                                    'nilai_raw': 'Elektro Kardiografi (EKG) '
+                                                 '28/06/2025 15:33:02 1,00 Rp. '
+                                                 '68000 Rp. 68.000',
+                                    'nilai_int': 68000},
+                      'radiologi': {'label': 'Radiologi',
+                                    'ditemukan': False,
+                                    'nilai_raw': None,
+                                    'nilai_int': None},
+                      'laboratorium': {'label': 'Laboratorium',
+                                       'ditemukan': False,
+                                       'nilai_raw': None,
+                                       'nilai_int': None},
+                      'pelayanan_darah': {'label': 'Pelayanan Darah',
+                                          'ditemukan': False,
+                                          'nilai_raw': None,
+                                          'nilai_int': None},
+                      'rehabilitasi': {'label': 'Rehabilitasi',
+                                       'ditemukan': False,
+                                       'nilai_raw': None,
+                                       'nilai_int': None},
+                      'kamar_akomodasi': {'label': 'Kamar/Akomodasi',
+                                          'ditemukan': False,
+                                          'nilai_raw': None,
+                                          'nilai_int': None},
+                      'rawat_intensif': {'label': 'Rawat Intensif',
+                                         'ditemukan': False,
+                                         'nilai_raw': None,
+                                         'nilai_int': None},
+                      'obat': {'label': 'Obat',
+                               'ditemukan': True,
+                               'nilai_raw': 'Jumlah Rp. 27372',
+                               'nilai_int': 27372},
+                      'obat_kronis': {'label': 'Obat Kronis',
+                                      'ditemukan': False,
+                                      'nilai_raw': None,
+                                      'nilai_int': None},
+                      'obat_kemoterapi': {'label': 'Obat Kemoterapi',
+                                          'ditemukan': False,
+                                          'nilai_raw': None,
+                                          'nilai_int': None},
+                      'alkes': {'label': 'Alkes',
+                                'ditemukan': False,
+                                'nilai_raw': None,
+                                'nilai_int': None},
+                      'bmhp': {'label': 'BMHP',
+                               'ditemukan': False,
+                               'nilai_raw': None,
+                               'nilai_int': None},
+                      'sewa_alat': {'label': 'Sewa Alat',
+                                    'ditemukan': False,
+                                    'nilai_raw': None,
+                                    'nilai_int': None}},
+ 'blocked_fields': [],
+ 'blocker_reasons': []}
+
+DOCUMENT_VALIDATION:
+{'is_billing_document': True,
+ 'ocr_readable': True,
+ 'quality_score': 98,
+ 'quality_level': 'high',
+ 'quality_threshold': 45,
+ 'document_profile': 'rajal',
+ 'component_categories_found': 4,
+ 'component_nominal_sum': 225372,
+ 'missing_critical_fields': [],
+ 'blocked_fields': [],
+ 'blocker_reasons': [],
+ 'signals': {'billing_marker_hits': 4,
+             'rupiah_hits': 30,
+             'date_hits': 16,
+             'noise_ratio': 0.003,
+             'profile_marker_hits': 2,
+             'total_candidates': [225372],
+             'conflicting_total_candidates': [],
+             'total_component_gap': 0,
+             'total_component_gap_ratio': 0.0,
+             'component_coverage_ratio': 1.0,
+             'component_sum_exceeds_total': False,
+             'component_sum_not_reconciled': False,
+             'partial_component_coverage_allowed': True},
+ 'recommendation': 'ready_for_automation'}
+
+RINGKASAN_TERSTRUKTUR:
+{'nama': 'NAHROWI',
+ 'profil_dokumen': 'rajal',
+ 'jenis_layanan': 'rajal',
+ 'total_tagihan_raw': 'Total Tagihan Rp. 225,372',
+ 'total_tagihan_int': 225372,
+ 'komponen_billing': {'prosedur_non_bedah': {'label': 'Prosedur Non Bedah',
+                                             'ditemukan': True,
+                                             'nilai_raw': 'Pemasangan Infus '
+                                                          'Standar 28/06/2025 '
+                                                          '18:33:15 1.00 Rp. '
+                                                          '10.000 Rp. 10.000',
+                                             'nilai_int': 45000},
+                      'prosedur_bedah': {'label': 'Prosedur Bedah',
+                                         'ditemukan': False,
+                                         'nilai_raw': None,
+                                         'nilai_int': None},
+                      'konsultasi': {'label': 'Konsultasi',
+                                     'ditemukan': True,
+                                     'nilai_raw': 'Feat nnn Dokder Umum '
+                                                  '28/06/2025 15:32:54 1,00 '
+                                                  'Rp. 85000 Rp. 85.000',
+                                     'nilai_int': 85000},
+                      'tenaga_ahli': {'label': 'Tenaga Ahli',
+                                      'ditemukan': False,
+                                      'nilai_raw': None,
+                                      'nilai_int': None},
+                      'keperawatan': {'label': 'Keperawatan',
+                                      'ditemukan': False,
+                                      'nilai_raw': None,
+                                      'nilai_int': None},
+                      'penunjang': {'label': 'Penunjang',
+                                    'ditemukan': True,
+                                    'nilai_raw': 'Elektro Kardiografi (EKG) '
+                                                 '28/06/2025 15:33:02 1,00 Rp. '
+                                                 '68000 Rp. 68.000',
+                                    'nilai_int': 68000},
+                      'radiologi': {'label': 'Radiologi',
+                                    'ditemukan': False,
+                                    'nilai_raw': None,
+                                    'nilai_int': None},
+                      'laboratorium': {'label': 'Laboratorium',
+                                       'ditemukan': False,
+                                       'nilai_raw': None,
+                                       'nilai_int': None},
+                      'pelayanan_darah': {'label': 'Pelayanan Darah',
+                                          'ditemukan': False,
+                                          'nilai_raw': None,
+                                          'nilai_int': None},
+                      'rehabilitasi': {'label': 'Rehabilitasi',
+                                       'ditemukan': False,
+                                       'nilai_raw': None,
+                                       'nilai_int': None},
+                      'kamar_akomodasi': {'label': 'Kamar/Akomodasi',
+                                          'ditemukan': False,
+                                          'nilai_raw': None,
+                                          'nilai_int': None},
+                      'rawat_intensif': {'label': 'Rawat Intensif',
+                                         'ditemukan': False,
+                                         'nilai_raw': None,
+                                         'nilai_int': None},
+                      'obat': {'label': 'Obat',
+                               'ditemukan': True,
+                               'nilai_raw': 'Jumlah Rp. 27372',
+                               'nilai_int': 27372},
+                      'obat_kronis': {'label': 'Obat Kronis',
+                                      'ditemukan': False,
+                                      'nilai_raw': None,
+                                      'nilai_int': None},
+                      'obat_kemoterapi': {'label': 'Obat Kemoterapi',
+                                          'ditemukan': False,
+                                          'nilai_raw': None,
+                                          'nilai_int': None},
+                      'alkes': {'label': 'Alkes',
+                                'ditemukan': False,
+                                'nilai_raw': None,
+                                'nilai_int': None},
+                      'bmhp': {'label': 'BMHP',
+                               'ditemukan': False,
+                               'nilai_raw': None,
+                               'nilai_int': None},
+                      'sewa_alat': {'label': 'Sewa Alat',
+                                    'ditemukan': False,
+                                    'nilai_raw': None,
+                                    'nilai_int': None}}}
+
+RAW_TEXT:
+=== PAGE 1 ===
+0. KEMENTERIAN KESEHATAN REPUBLIK INDONESIA JKN
+[kK Berkas Klaim Individual Pasien 28/06/2025
+9
+eee
+Kode Rumah Sakit: 3674204 Kelas Rumah Sakit: C
+Nama RS RSUD PONDOK AREN Jenis Tarif TARIF RS KELAS C PEMERINTAH
+a ————s——EEEtt mL ——
+Nomor Peserta + 0000820190035 Nomor SEP (0496R0530625V000435
+Nomor Rekam Medis: 8971 Tanggal Masuk 28/06/2025
+Umur Tahun : 45 Tanggal Keluar 28/06/2025
+Umur Hari : 16480 Jenis Perawatan: 2- Rawat Jalan
+Tanggal Lahir 15/05/1980 Cara Pulang : 1 Atas Persetujuan Dokter
+Jenis Kelamin 1- Laki-laki Los : hari
+Kelas Perawatan: Regular Berat Lahir -
+Diagnosa Utama: K20.5 — Chronic gastritis, unspecified
+Diagnosa Sekunder: -
+Prosedur : 80.52 Electrocardiogram
+99.18 Injection or Infusion of electrolytes
+‘ADL Sub Acute 7 ADL Chronic -
+Hasil Grouping
+Hast @rowping MI MEA.
+INA-CBG : K-5-18-0 PENYAKIT SISTEM PENCERNAAN LAIN-LAIN Rp 244.600.00
+Sub Acute - - Rp 0.00
+Chronic po - Rp 0.00
+Special CMG: - Rp 0.00
+etc | een
+Total Tarif: Rp 244.600.00
+EEE
+Generated Eredar 5.9.2 202506000731 © 200507-03 09.19.94 Temper 7
+=== PAGE 5 ===
+«71. RUMAH SAKIT UMUM DAERAH PONDOK AREN (Gay TOTES AA
+pa. KOTA TANGERANG SELATAN Nama Pasien: “10: ay
+(Rt Pindah Am Bl JL Raya Pondok Betung, Kec. Pondok Aren, Tanggal Lahir: 1S /O5 (1980.
+Hata Tamyerang Selatan 18221 Mangan Rows: C1 D
+eal ah loons an Aa nian Ringan Ka: Che g taaah
+2 du oS
+ot Pees Oo eee
+[Poison dengan Bantuan
+aie Da
+i be (Hipertensi / Diabetes / Jantung / Asma /
+Kama Dam Dok Oka Dres Dis Diona
+Pendidikan: ISO DWP OMA DS DS DS Dunya
+Pekerjaan : CJ Wiraswasta [J PNS Ll Pegawai Swasta Ll Pensunan [Jain tain
+Psiko — Sosio - Spiritual . = “EM — ne Li ld a
+Psikiologis : [-ffenang [] Cemas /Gelisah [] Marah OGin- tin an
+Tinggal 7 [sendin fotersama KeluargaE]Tunawiama Rumah CJ Perawatan /jompo
+[ Den an:
+at er C=
+CT
+[Ex [az | terakhir [Tidak yakin /tidaktahu P2
+rs ll Papa. mana Badai MG
+? (sg ad
+aa (sg fp
+Ma Me TE Raka asupan berkurang karena Tidak [7 9
+ni n a — |
+MST = 2 2 berisiko malnutrisi {ida nase maka a
+- a
+RESIKO JATUH PASIEN DEWASA DENGAN SKALA MORSE (14-64 tahun)
+Pn ye pp aa
+Re ——————— Dp
+pa en
+acid eT
+| abu Da Dc |e er
+Bari
+[rk / Waker as
+| Berpegangan PadaPerabot | 30
+Po Te Te ————A
+pe ——— 5 88
+Pem Dj pa a ee
+Goya Berjalan ——— Ee
+Terganggu [30
+a pe
+[KeterbatasonOoyatngst Ps
+(TT etis 1 25
+indikator Risiko Tindakan
+0-24 Tidak Berisiko Minimal Care
+25 - 50 Risiko Rendah x Intervensi Pencegahan Jatuh Standar
+251 Risiko Tinggi (Kenakan Gelang Kuning Kepada Pasi Intevensi Pencegahan Jatuh Riso Tinggi
+Pukul Wb
+Perawat
+bo NS
+Tanda Tangan & Nama Jes
+Terima kasih atas kerja samanya telah mengisi formulir ini dengan benar dan jelas
+Page 3 of 4
+=== PAGE 6 ===
+S920 Met. 06/28/2025 15219211 [ MEMORY ] | RSUD PONDOK AREN
+seem ADULT ECG eee HU DRIET S28 (UB) |--#¢-Physician-dusk-Reyiew-£06-+he 7
+(ID No.) : 708 | RATE) |: 85 i 10730 | INCOMPLETE RBBB | i
+NUMBER = PRS TT 703 m3} 0890 | ARRHYTHMIA (RR IRREGULAR) i
+NAME: TM.MAHROWIT —}-} QRS F 90 ms} i i | i i
+i i i HEPA $434} r i T
+| pop 5 [LPR i 156.8} | | | | |
+SEX|AGE : MALE | + (43 yr.) lat 3 356 ms] | | i t {
+THGT-WT = + 1 | QT¢ : a2R Py at i i i Hil
+1 BP fF 4 HOB abet tnt en naa epee et aR 1 t}
+Da dR YB) 13-0 mm} | H |
+| JUDGEMENT + 1 ER+S. a 16.0 nmi | t
+[Ae a ie AL i | i IEE
+Vi i
+1 avn il Pg ee i |
+: : I
+Ml ; ve Fal i a
+Ly
+SE ia aVe V6 i if
+| if
+Dien exsaiienene une aoan - - ae om 4
+=== PAGE 7 ===
+== PEMERINTAH KOTA TANGERANG SELATAN f
+Gy f DINAS KESEHATAN
+= =) RUMAH SAKIT UMUM DAERAH PONDOK AREN | Rui Pindah dun
+VI SY Jalan Pondok Betung, Kecamatan Pondok Aren, Kota Tangerang Selatan 15221,
+Telepon (021) 73492962, Faksimile (021) 73492962,
+Pos-elrsudpondokaren@langerangselatankota gp id
+RINCIAN BIAYA PELAYANAN PASIEN
+No. RM 00-00-89-71 Tol. Tagihan 28/08/2025 15.18.10
+Nama NAHROW! Cara Bayar BPJS/ JKN
+Jenis Kelamin / Umur: Laki-Laki (45 Thi 1 bu 13 hr) No. Jaminan (0000820190035
+Unit Layanan Item/Tindakan Pemeriksaan Tanggal dml_——‘TariffMarga ‘Total Tagihan
+Gawat Darurat [2506280015] / 28-06-2025 15:18:10
+IGD Triase
+Feat nnn Dokder Umum 28/06/2025 15:32:54 1,00 Rp. 85000 Rp. 85.000
+Elektro Kardiografi (EKG) 28/06/2025 15:33:02 1,00 Rp. 68000 Rp. 68.000
+Pemasangan Infus Standar 28/06/2025 18:33:15 1.00 Rp. 10.000 Rp. 10.000
+Memasukkan Obat 28/06/2025 15:33:25 100 Rp. 35000 35.000
+IVIM/SCISUPP Rp. ia
+Jumlah Rp. 198.000
+Farmasi
+paracetamol/parasetamol 28/06/2025 15:42:28 10,00 Rp. 182 Rp. 1.820
+tabietkepsuvkaplet 500 mg 0
+‘Syringe/Disposable 28/06/2025 15:42:28 200 Rp. 1.199 Rp. 2.398
+syringe/Disposable Syringe with
+needle ukuran 3 cc! 3 mL (NIPRO)
+0
+IV Catheter/IV Cannula /Cathy/ 28/06/2025 15:42:28 200 Rp. 7992 Rp. 15.984
+Primaflon Ukuran 22 With Wings
+and With Port (Nipro) +
+KetorolakiKetorolaciKetorolac 28/06/2025 18:42:28 1.00 Rp. 1620 Rp. 1.620
+TrometamolKetorolac
+‘Tromethamin Inj 30mgiml (3%) 0
+Vitamin 8 Kompleks/ Vitamin 8 29/06/2025 16:42:28 10,00. Rp. 63 Rp. 630
+complex Tablet
+Omeprazo/ Omeprazole Kapsul 28/06/2025 15:42:28 6.00 Rp. 258 Rp. 1.548
+20 mg (IFARS) +
+Ranitidin Hydrochloride (HC!) 25 28/06/2025 15:42:28 1,00 Rp. 2.040 Rp. 2.040
+‘gil @ 2mI (BERNO) ++
+Disposable syringe with needle 28/06/2025 15:32:28 1.00 Rp. 1.332 Rp. 1.332
+ukuran 5 cc! 5 mL/ Spuit 5 cc
+(NPRO) 0
+Jumlah Rp. 27372
+Halaman 4 dari 2
+=== PAGE 8 ===
+4 wencccasenaneoedalfbnntsoneesenee Total Tagihan Rp. 225,372
+TEAM 1 Toral Total Jaminan Ro. 0
+Taanama maa enaamankunpunaaaamarananai Discount Rp. 0
+1BPJS/JKN i 0! Sa un aT |
+Leche | oer Total Bayar / Tunai Rp. 0
+Pembulatan Rp. 0
+Total Deposit Ro
+Sisa Pembayaran Rp. 0
+Pasien / Keluarga Pasien © TANGERANG SELATAN, 28 Juni 2025
+IL —AN Kolekorikasir
+UD \FF
+untae 1S AHMAD FAUZI, S.Kom)
+Pate tombak eran sso
+meninggakan ase
