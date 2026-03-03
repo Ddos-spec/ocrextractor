@@ -2275,10 +2275,12 @@ def build_ai_bundle(
     ocr_payload: dict[str, str],
     ai_field_analysis: dict[str, dict[str, object]],
     keyword_context: dict[str, list[str]],
+    raw_source_text: Optional[str] = None,
     extraction_diagnostics: Optional[dict[str, object]] = None,
 ) -> dict[str, object]:
     """Build a single AI-ready package containing all extracted context."""
-    raw_text, truncated = _truncate_for_bundle(text)
+    bundle_text = raw_source_text if isinstance(raw_source_text, str) and raw_source_text else text
+    raw_text, truncated = _truncate_for_bundle(bundle_text)
     document_validation = _build_document_validation(
         text=text,
         nama=nama,
@@ -2292,10 +2294,10 @@ def build_ai_bundle(
         "schema_version": "v2",
         "source": "hospital_billing_ocr",
         "raw_text": raw_text,
-        "raw_text_full": text,
+        "raw_text_full": bundle_text,
         "raw_text_truncated": truncated,
-        "raw_text_chars": len(text),
-        "document_scope": "selected_billing_segment",
+        "raw_text_chars": len(bundle_text),
+        "document_scope": "full_document" if bundle_text != text else "selected_billing_segment",
         "ringkasan_terstruktur": {
             "nama": nama,
             "profil_dokumen": document_profile,
@@ -2724,6 +2726,7 @@ def parse_billing_text(
         ocr_payload=ocr_payload,
         ai_field_analysis=ai_field_analysis,
         keyword_context=keyword_context,
+        raw_source_text=text,
         extraction_diagnostics=extraction_diagnostics,
     )
 

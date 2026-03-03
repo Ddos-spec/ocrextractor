@@ -195,6 +195,34 @@ class ParseBillingSafetyTests(unittest.TestCase):
         self.assertEqual("SITI AMINAH", safe_summary["nama"])
         self.assertEqual(50000, safe_summary["total_tagihan_int"])
 
+    def test_ai_bundle_keeps_full_document_raw_text(self) -> None:
+        mixed_text = "\n".join(
+            [
+                "=== PAGE 1 ===",
+                "HEADER DOKUMEN UMUM",
+                "=== PAGE 2 ===",
+                "RINCIAN BIAYA PELAYANAN PASIEN",
+                "Nama Pasien: SITI AMINAH",
+                "Farmasi",
+                "Jumlah Rp. 20.000",
+                "Laboratorium",
+                "Jumlah Rp. 30.000",
+                "Total Tagihan Rp. 50.000",
+                "Kasir",
+            ]
+        )
+
+        parsed = parse_billing_text(
+            mixed_text,
+            extraction_diagnostics={
+                "machine_readable_detected": False,
+                "ocr_used": True,
+            },
+        )
+
+        self.assertEqual(mixed_text, parsed.ai_bundle["raw_text_full"])
+        self.assertEqual("full_document", parsed.ai_bundle["document_scope"])
+
     def test_numbered_pages_are_sorted_before_tail_selection(self) -> None:
         mixed_text = "\n".join(
             [
